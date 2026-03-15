@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { BookCopy, CalendarClock, Clock, UserCheck, Users } from 'lucide-react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
@@ -19,23 +19,32 @@ type TimeFrame = 'day' | 'week' | 'month';
 
 export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
+  const [filteredLogs, setFilteredLogs] = useState<VisitLog[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
-  const filteredLogs = useMemo(() => {
-    const now = new Date();
-    if (timeFrame === 'day') {
-      const yesterday = subDays(now, 1);
-      return mockVisitLogs.filter(log => log.timestamp > yesterday);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isClient) {
+      const now = new Date();
+      let newLogs: VisitLog[];
+      if (timeFrame === 'day') {
+        const yesterday = subDays(now, 1);
+        newLogs = mockVisitLogs.filter(log => log.timestamp > yesterday);
+      } else if (timeFrame === 'week') {
+        const interval = { start: startOfWeek(now), end: endOfWeek(now) };
+        newLogs = mockVisitLogs.filter(log => isWithinInterval(log.timestamp, interval));
+      } else if (timeFrame === 'month') {
+        const interval = { start: startOfMonth(now), end: endOfMonth(now) };
+        newLogs = mockVisitLogs.filter(log => isWithinInterval(log.timestamp, interval));
+      } else {
+        newLogs = [];
+      }
+      setFilteredLogs(newLogs);
     }
-    if (timeFrame === 'week') {
-      const interval = { start: startOfWeek(now), end: endOfWeek(now) };
-      return mockVisitLogs.filter(log => isWithinInterval(log.timestamp, interval));
-    }
-    if (timeFrame === 'month') {
-      const interval = { start: startOfMonth(now), end: endOfMonth(now) };
-      return mockVisitLogs.filter(log => isWithinInterval(log.timestamp, interval));
-    }
-    return [];
-  }, [timeFrame]);
+  }, [timeFrame, isClient]);
 
   const totalVisits = filteredLogs.length;
   const uniqueVisitors = new Set(filteredLogs.map(log => log.userId)).size;
