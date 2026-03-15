@@ -1,8 +1,8 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useActionState } from 'react';
 import { KeyRound, Mail, QrCode } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [initialState, setInitialState] = useState<any>({});
-  const [state, formAction] = useFormState(loginAction, initialState);
+  const [state, formAction] = useActionState(loginAction, initialState);
 
   useEffect(() => {
     if (state?.role === 'admin') {
