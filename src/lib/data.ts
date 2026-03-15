@@ -17,7 +17,7 @@ export const mockUsers: User[] = Array.from({ length: 25 }, (_, i) => {
     email,
     college: colleges[i % colleges.length],
     role: email.endsWith('@neu.edu.ph') ? 'admin' : 'user',
-    status: Math.random() > 0.1 ? 'active' : 'blocked',
+    status: (i + 1) % 8 === 0 ? 'blocked' : 'active',
     avatarUrl: avatarPlaceholders[i % avatarPlaceholders.length].imageUrl,
   };
 });
@@ -29,7 +29,8 @@ export const mockVisitLogs: VisitLog[] = [];
 const now = new Date();
 for (let i = 0; i < 200; i++) {
   const user = mockUsers[i % mockUsers.length];
-  const timestamp = new Date(now.getTime() - Math.random() * 30 * 24 * 60 * 60 * 1000); // within last 30 days
+  // Generate deterministic timestamps, spreading them over the last ~25 days
+  const timestamp = new Date(now.getTime() - (i * 3 * 60 * 60 * 1000));
   
   mockVisitLogs.push({
     id: `visit-${1001 + i}`,
