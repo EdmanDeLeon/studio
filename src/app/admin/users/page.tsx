@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { MoreHorizontal, Search, UserPlus, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Search, UserPlus, Trash2, History } from 'lucide-react';
 import { doc, collection } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +50,7 @@ export default function UserManagementPage() {
 
   const { toast } = useToast();
   const firestore = useFirestore();
+  const router = useRouter();
 
   const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
   const { data: users = [], isLoading } = useCollection<User>(usersQuery);
@@ -72,6 +75,10 @@ export default function UserManagementPage() {
     setSelectedUser(user);
     setIsFormOpen(true);
   }
+
+  const handleViewHistory = (userId: string) => {
+    router.push(`/admin/users/${userId}/history`);
+  };
 
   const handleDeleteUser = (user: User) => {
     setUserToDelete(user);
@@ -193,6 +200,10 @@ export default function UserManagementPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleEditUser(user)}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleViewHistory(user.id)}>
+                            <History className="mr-2 h-4 w-4" />
+                            View History
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleUserStatus(user.id, user.isBlocked)}>
                           {user.isBlocked ? 'Unblock' : 'Block'}
                         </DropdownMenuItem>
