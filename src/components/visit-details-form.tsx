@@ -1,17 +1,17 @@
 'use client';
 
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { useActionState, useEffect } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { useState } from "react";
+import { collection, serverTimestamp } from "firebase/firestore";
 
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { colleges, visitReasons } from "@/lib/types"
-import { submitVisitDetailsAction } from "@/lib/actions";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { colleges, visitReasons } from "@/lib/types";
+import { useFirestore, addDocumentNonBlocking } from "@/firebase";
 
 const formSchema = z.object({
   college: z.string({ required_error: "Please select your college." }),
@@ -27,16 +27,18 @@ const formSchema = z.object({
     path: ["otherReason"], 
 });
 
+type VisitDetailsFormData = z.infer<typeof formSchema>;
+
 type VisitDetailsFormProps = {
   onSubmitSuccess: () => void;
   userId: string;
 };
 
 export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormProps) {
-  const { toast } = useToast();
-  const [state, formAction, isPending] = useActionState(submitVisitDetailsAction, null);
+  const firestore = useFirestore();
+  const [isPending, setIsPending] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<VisitDetailsFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       reason: "",
@@ -46,30 +48,33 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
   
   const reasonValue = form.watch("reason");
 
-  useEffect(() => {
-    if (state?.success) {
-        onSubmitSuccess();
-    } else if (state?.message && !state.errors) {
-        toast({
-            variant: 'destructive',
-            title: 'Submission Failed',
-            description: state.message,
-        });
-    }
-  }, [state, onSubmitSuccess, toast]);
+  const onSubmit = (data: VisitDetailsFormData) => {
+    setIsPending(true);
+    
+    const visitLogCollection = collection(firestore, 'visit_logs');
+    const reasonForVisit = data.reason === 'Other' ? data.otherReason : data.reason;
 
+    addDocumentNonBlocking(visitLogCollection, {
+        userId,
+        college: data.college,
+        reasonForVisit,
+        entryTime: serverTimestamp(),
+    });
+    
+    // The write is non-blocking, so we can immediately call success.
+    onSubmitSuccess();
+  };
 
   return (
     <Form {...form}>
-      <form action={formAction} className="space-y-6">
-        <input type="hidden" name="userId" value={userId} />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="college"
           render={({ field }) => (
             <FormItem>
               <FormLabel>College Affiliation</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} name="college">
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select your college" />
@@ -81,7 +86,7 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
                   ))}
                 </SelectContent>
               </Select>
-              <FormMessage>{state?.errors?.college?.[0]}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
@@ -91,7 +96,7 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
           render={({ field }) => (
             <FormItem>
               <FormLabel>Reason for Visit</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} name="reason">
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a reason" />
@@ -103,7 +108,7 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
                   ))}
                 </SelectContent>
               </Select>
-              <FormMessage>{state?.errors?.reason?.[0]}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
@@ -116,9 +121,9 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
                 <FormItem>
                     <FormLabel>Please Specify</FormLabel>
                     <FormControl>
-                        <Textarea placeholder="e.g., To use a specific software, attend a meeting, etc." {...field} name="otherReason" />
+                        <Textarea placeholder="e.g., To use a specific software, attend a meeting, etc." {...field} />
                     </FormControl>
-                    <FormMessage>{state?.errors?.otherReason?.[0]}</FormMessage>
+                    <FormMessage />
                 </FormItem>
                 )}
             />
