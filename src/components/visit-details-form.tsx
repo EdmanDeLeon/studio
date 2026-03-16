@@ -10,11 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { colleges, visitReasons } from "@/lib/types";
+import { visitReasons, type College } from "@/lib/types";
 import { useFirestore, addDocumentNonBlocking } from "@/firebase";
 
 const formSchema = z.object({
-  college: z.string({ required_error: "Please select your college." }),
   reason: z.string({ required_error: "Please select a reason for your visit." }),
   otherReason: z.string().optional(),
 }).refine(data => {
@@ -32,9 +31,10 @@ type VisitDetailsFormData = z.infer<typeof formSchema>;
 type VisitDetailsFormProps = {
   onSubmitSuccess: () => void;
   userId: string;
+  userCollege: College;
 };
 
-export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormProps) {
+export function VisitDetailsForm({ onSubmitSuccess, userId, userCollege }: VisitDetailsFormProps) {
   const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
 
@@ -56,7 +56,7 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
 
     addDocumentNonBlocking(visitLogCollection, {
         userId,
-        college: data.college,
+        college: userCollege,
         reasonForVisit,
         entryTime: serverTimestamp(),
     });
@@ -68,28 +68,6 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="college"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>College Affiliation</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your college" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {colleges.map(college => (
-                    <SelectItem key={college} value={college}>{college}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <FormField
           control={form.control}
           name="reason"

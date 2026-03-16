@@ -79,7 +79,7 @@ function WelcomeComponent() {
                         Please provide the following details for our records. Click submit when you're done.
                         </DialogDescription>
                     </DialogHeader>
-                    <VisitDetailsForm onSubmitSuccess={handleFormSubmit} userId={user.id} />
+                    <VisitDetailsForm onSubmitSuccess={handleFormSubmit} userId={user.id} userCollege={user.college} />
                  </>
             )}
             {!isUserLoading && !user && email && (
