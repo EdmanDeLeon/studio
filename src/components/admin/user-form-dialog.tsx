@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useEffect, useState } from "react";
-import { UserPlus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { doc, collection } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -54,12 +53,11 @@ type UserFormData = z.infer<typeof userFormSchema>;
 type UserFormDialogProps = {
   user?: User;
   users: User[];
-  children: React.ReactNode;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
 
-export function UserFormDialog({ user, users, children, open, onOpenChange }: UserFormDialogProps) {
+export function UserFormDialog({ user, users, open, onOpenChange }: UserFormDialogProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
@@ -147,7 +145,6 @@ export function UserFormDialog({ user, users, children, open, onOpenChange }: Us
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit User" : "Add New User"}</DialogTitle>
