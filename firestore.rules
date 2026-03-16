@@ -70,15 +70,11 @@ service cloud.firestore {
 
     /**
      * Validates if a user is permitted to create a new visit log.
-     * They must be signed in, not blocked, and the log must be for themselves.
-     * This requires reading the user's own profile, a secure self-authorization pattern.
+     * They must be signed in, and the log must be for themselves.
      */
     function canCreateVisitLog() {
       let isCreatingForSelf = request.resource.data.userId == request.auth.uid;
-      let userProfile = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      // The rule will fail if userProfile is null. Check for existence first.
-      let isNotBlocked = userProfile != null && userProfile.data.isBlocked == false;
-      return isSignedIn() && isCreatingForSelf && isNotBlocked;
+      return isSignedIn() && isCreatingForSelf;
     }
 
     // =====================================================================
