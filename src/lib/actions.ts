@@ -27,7 +27,7 @@ export async function loginAction(prevState: any, formData: FormData) {
   }
   
   if (email.endsWith('@neu.edu')) {
-    return { role: 'user' };
+    return { role: 'user', email: email };
   }
 
   return { message: 'Invalid institutional email.' };

@@ -34,9 +34,9 @@ export default function LoginPage() {
     if (state?.role === 'admin') {
       toast({ title: 'Admin login successful', description: 'Redirecting to dashboard...' });
       router.push('/admin/dashboard');
-    } else if (state?.role === 'user') {
+    } else if (state?.role === 'user' && state.email) {
       toast({ title: 'Login successful!', description: 'Please provide your visit details.' });
-      router.push('/welcome');
+      router.push(`/welcome?email=${encodeURIComponent(state.email)}`);
     } else if (state?.message) {
       toast({
         variant: 'destructive',
