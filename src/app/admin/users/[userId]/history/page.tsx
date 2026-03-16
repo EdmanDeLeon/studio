@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Timestamp } from 'firebase/firestore';
@@ -21,10 +21,9 @@ const getDate = (time: Timestamp | Date) => {
     return time.toDate();
 }
 
-export default function UserHistoryPage() {
+export default function UserHistoryPage({ params }: { params: { userId: string } }) {
   const router = useRouter();
-  const params = useParams();
-  const userId = params.userId as string;
+  const userId = params.userId;
 
   const user = mockUsers.find(u => u.id === userId);
   const visitLogs = mockVisitLogs.filter(log => log.userId === userId);
