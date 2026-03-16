@@ -96,7 +96,7 @@ service cloud.firestore {
      */
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
+      allow list: if isSignedIn();
       allow create: if isCreatingOwnDoc(userId);
       allow update: if (isOwner(userId) || isAdmin()) && resource != null && request.resource.data.id == resource.data.id;
       allow delete: if isAdmin() && resource != null;
@@ -129,7 +129,7 @@ service cloud.firestore {
      */
     match /visit_logs/{visitLogId} {
       allow get: if isAdmin() || (isOwner(resource.data.userId) && resource != null);
-      allow list: if isAdmin();
+      allow list: if isSignedIn();
       allow create: if canCreateVisitLog();
       allow update: if isAdmin() && resource != null;
       allow delete: if isAdmin() && resource != null;
