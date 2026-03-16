@@ -21,6 +21,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -44,7 +45,6 @@ const userFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   email: z.string().email("Invalid email address."),
-  qrCodeIdentifier: z.string().min(1, "Student ID is required."),
   college: z.string({ required_error: "Please select a college." }),
   role: z.enum(["user", "admin"], { required_error: "Please select a role." }),
 });
@@ -53,12 +53,13 @@ type UserFormData = z.infer<typeof userFormSchema>;
 
 type UserFormDialogProps = {
   user?: User;
+  users: User[];
   children: React.ReactNode;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 };
 
-export function UserFormDialog({ user, children, open, onOpenChange }: UserFormDialogProps) {
+export function UserFormDialog({ user, users, children, open, onOpenChange }: UserFormDialogProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
@@ -70,7 +71,6 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
       firstName: "",
       lastName: "",
       email: "",
-      qrCodeIdentifier: "",
       college: undefined,
       role: "user",
     },
@@ -82,7 +82,6 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        qrCodeIdentifier: user.qrCodeIdentifier,
         college: user.college,
         role: user.role,
       });
@@ -99,6 +98,21 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
             const userRef = doc(firestore, 'users', user.id);
             updateDocumentNonBlocking(userRef, data);
         } else {
+            const currentYear = new Date().getFullYear();
+            let maxIdNum = 0;
+            if (users && users.length > 0) {
+              for (const u of users) {
+                if (u.qrCodeIdentifier && u.qrCodeIdentifier.includes('-')) {
+                  const numPart = parseInt(u.qrCodeIdentifier.split('-')[1], 10);
+                  if (!isNaN(numPart) && numPart > maxIdNum) {
+                    maxIdNum = numPart;
+                  }
+                }
+              }
+            }
+            const nextIdNum = maxIdNum + 1;
+            const newQrCodeIdentifier = `${currentYear}-${String(nextIdNum).padStart(6, '0')}`;
+
             const newDocRef = doc(collection(firestore, 'users'));
             const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
             const avatarIndex = (newDocRef.id.charCodeAt(0) || 0) % avatarPlaceholders.length;
@@ -107,6 +121,7 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
             setDocumentNonBlocking(newDocRef, {
                 ...data,
                 id: newDocRef.id,
+                qrCodeIdentifier: newQrCodeIdentifier,
                 isBlocked: false,
                 avatarUrl: randomAvatar,
             }, { merge: true });
@@ -183,19 +198,23 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
                 </FormItem>
               )}
             />
-            <FormField
-                control={form.control}
-                name="qrCodeIdentifier"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Student ID (for QR/Tap)</FormLabel>
+            {isEditMode && user ? (
+                <FormItem>
+                    <FormLabel>Student ID (QR/Tap)</FormLabel>
                     <FormControl>
-                      <Input placeholder="2024-123456" {...field} />
+                        <Input value={user.qrCodeIdentifier} disabled />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <FormDescription>Student ID cannot be changed.</FormDescription>
+                </FormItem>
+            ) : (
+              <FormItem>
+                <FormLabel>Student ID (QR/Tap)</FormLabel>
+                <FormControl>
+                    <Input value="Will be auto-generated" disabled />
+                </FormControl>
+                <FormDescription>The Student ID is generated automatically for new users.</FormDescription>
+              </FormItem>
+            )}
             <FormField
               control={form.control}
               name="college"

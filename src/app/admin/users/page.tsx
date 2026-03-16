@@ -211,7 +211,7 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
     </div>
-    <UserFormDialog user={selectedUser} open={isFormOpen} onOpenChange={setIsFormOpen}>
+    <UserFormDialog user={selectedUser} users={users} open={isFormOpen} onOpenChange={setIsFormOpen}>
         {/* This is a dummy trigger, the dialog is controlled by state */}
         <span /> 
     </UserFormDialog>
