@@ -2,6 +2,9 @@
 
 import { z } from 'zod';
 import { adminCategorizeVisitReasons } from '@/ai/flows/admin-categorize-visit-reasons';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { getSdks } from '@/firebase';
+import { initializeFirebase } from '@/firebase';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -41,4 +44,41 @@ export async function categorizeReasonAction(reason: string) {
     console.error(error);
     return { success: false, message: 'Failed to categorize reason.' };
   }
+}
+
+const visitDetailsSchema = z.object({
+    college: z.string(),
+    reasonForVisit: z.string(),
+    userId: z.string(),
+});
+
+export async function submitVisitDetailsAction(prevState: any, formData: FormData) {
+    const validatedFields = visitDetailsSchema.safeParse({
+        college: formData.get('college'),
+        reasonForVisit: formData.get('reason'),
+        userId: formData.get('userId'),
+    });
+
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Invalid data.',
+        };
+    }
+
+    try {
+        const { firestore } = initializeFirebase();
+        const { userId, reasonForVisit, college } = validatedFields.data;
+
+        await addDoc(collection(firestore, 'visit_logs'), {
+            userId,
+            reasonForVisit,
+            college,
+            entryTime: serverTimestamp(),
+        });
+        return { success: true, message: 'Visit logged successfully.' };
+    } catch (error) {
+        console.error(error);
+        return { success: false, message: 'Failed to log visit.' };
+    }
 }

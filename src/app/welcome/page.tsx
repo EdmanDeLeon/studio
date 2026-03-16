@@ -1,16 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { BookHeart } from 'lucide-react';
+import { BookHeart, CircleUserRound } from 'lucide-react';
 
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VisitDetailsForm } from '@/components/visit-details-form';
 import { Logo } from '@/components/logo';
+import { useUser } from '@/firebase';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function WelcomePage() {
   const [isFormOpen, setIsFormOpen] = useState(true);
   const { toast } = useToast();
+  const { user, isUserLoading } = useUser();
 
   const handleFormSubmit = () => {
     setIsFormOpen(false);
@@ -25,13 +29,37 @@ export default function WelcomePage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-8 text-center bg-background">
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>Visit Details</DialogTitle>
-            <DialogDescription>
-              Please provide the following details for our records. Click submit when you're done.
-            </DialogDescription>
-          </DialogHeader>
-          <VisitDetailsForm onSubmit={handleFormSubmit} />
+            {isUserLoading && (
+                <div className="flex flex-col items-center gap-4 py-8">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="space-y-2">
+                        <Skeleton className="h-4 w-[250px]" />
+                        <Skeleton className="h-4 w-[200px]" />
+                    </div>
+                </div>
+            )}
+            {!isUserLoading && user && (
+                 <>
+                    <DialogHeader>
+                        <DialogTitle>Welcome, {user.displayName || 'Visitor'}!</DialogTitle>
+                        <DialogDescription>
+                        Please provide the following details for our records. Click submit when you're done.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <VisitDetailsForm onSubmitSuccess={handleFormSubmit} userId={user.uid} />
+                 </>
+            )}
+            {!isUserLoading && !user && (
+                <div className="flex flex-col items-center gap-4 text-center py-8">
+                    <CircleUserRound className="w-12 h-12 text-destructive" />
+                    <DialogHeader>
+                        <DialogTitle>Authentication Error</DialogTitle>
+                        <DialogDescription>
+                            We couldn't verify your identity. Please try logging in again.
+                        </DialogDescription>
+                    </DialogHeader>
+                </div>
+            )}
         </DialogContent>
       </Dialog>
       

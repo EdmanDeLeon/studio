@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export const colleges = [
   'College of Engineering', 
   'College of Arts and Sciences', 
@@ -32,13 +34,14 @@ export type User = {
   email: string;
   college: College;
   role: 'admin' | 'user';
-  status: 'active' | 'blocked';
+  isBlocked: boolean;
   avatarUrl: string;
 };
 
 export type VisitLog = {
   id: string;
   userId: string;
-  reason: VisitReason | string;
-  timestamp: Date;
+  reasonForVisit: VisitReason | string;
+  entryTime: Timestamp;
+  college?: College;
 };
