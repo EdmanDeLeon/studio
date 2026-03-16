@@ -5,7 +5,7 @@
  * This ruleset enforces a strict security model based on two primary roles: standard Users and Administrators.
  * Standard users have ownership-based access, meaning they can only interact with their own data.
  * Administrators have broader permissions for system management, reporting, and moderation.
- * The rules prioritize performance and security by using denormalization and existence checks to make authorization decisions atomic and independent.
+ * The rules prioritize performance and security byusing denormalization and existence checks to make authorization decisions atomic and independent.
  *
  * ## Data Structure
  * The data structure is intentionally flat, using top-level collections to support efficient, targeted queries (Query-Accessible Paths or QAPs).
