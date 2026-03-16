@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents an individual (student, faculty, or administrator) within the NEU LibLog system. This entity stores their identification, role, college affiliation, and access status.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Institutional email address of the user, used for login.",
+          "format": "email"
+        },
+        "qrCodeIdentifier": {
+          "type": "string",
+          "description": "Unique identifier scanned from a QR code for quick 'Tap ID' login. This typically corresponds to an institutional ID found on a student/faculty ID card."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the user in the system, defining their access levels (e.g., Administrator, Student, Faculty)."
+        },
+        "collegeId": {
+          "type": "string",
+          "description": "Reference to the College entity this user is affiliated with. (Relationship: College 1:N User)"
+        },
+        "isBlocked": {
+          "type": "boolean",
+          "description": "A flag indicating whether the user is currently blocked from accessing the system by an administrator."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "qrCodeIdentifier",
+        "firstName",
+        "lastName",
+        "role",
+        "collegeId",
+        "isBlocked"
+      ]
+    },
+    "VisitLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VisitLog",
+      "type": "object",
+      "description": "Records each instance a user enters the library, along with details pertaining to that specific visit.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the VisitLog entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who made this visit. (Relationship: User 1:N VisitLog)"
+        },
+        "entryTime": {
+          "type": "string",
+          "description": "Timestamp indicating the precise date and time when the user entered the library.",
+          "format": "date-time"
+        },
+        "reasonForVisit": {
+          "type": "string",
+          "description": "The user-provided reason for visiting the library."
+        },
+        "reasonCategory": {
+          "type": "string",
+          "description": "An optional categorized reason for the visit, potentially assigned by an AI tool for consistent reporting and analysis."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "entryTime",
+        "reasonForVisit"
+      ]
+    },
+    "College": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "College",
+      "type": "object",
+      "description": "Represents a specific college, department, or academic unit within the university. This entity is used to categorize users and filter statistics.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the College entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full, official name of the college or department."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores individual user profiles (students, faculty, administrators). Access is restricted to the user themselves (path-based ownership) or administrators. Includes the 'isBlocked' field which is checked for self-authorization during visit log creation.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, corresponding to `request.auth.uid`."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Designates users as administrators using the 'Existence over Content' principle. The presence of a document at this path signifies administrator privileges for the corresponding userId, enabling robust DBAC for global roles without requiring 'get()' calls on the user's profile for role checks.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who has administrator privileges, corresponding to `request.auth.uid`."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/visit_logs/{visitLogId}",
+        "definition": {
+          "entityName": "VisitLog",
+          "schema": {
+            "$ref": "#/backend/entities/VisitLog"
+          },
+          "description": "Records each library visit. This is a top-level collection to support Query-Accessible Paths (QAPs) for administrators who need to query and filter all visit logs for statistics and reporting. Includes denormalized 'userId' field for authorization independence, explicitly linking the log to the user who created it.",
+          "params": [
+            {
+              "name": "visitLogId",
+              "description": "The unique identifier for a specific library visit log entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/colleges/{collegeId}",
+        "definition": {
+          "entityName": "College",
+          "schema": {
+            "$ref": "#/backend/entities/College"
+          },
+          "description": "Stores information about colleges/departments. This is a top-level collection accessible to all authenticated users for selection purposes (e.g., during login or profile update), while only administrators can manage its content.",
+          "params": [
+            {
+              "name": "collegeId",
+              "description": "The unique identifier for a specific college or department."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure for NEU LibLog prioritizes Authorization Independence, DBAC (Database-Backed Access Control), and Query-Accessible Paths (QAPs) to ensure a secure, scalable, and debuggable system. \n\n1.  **Authorization Independence & Denormalization:**\n    *   **User Roles (Administrator):** To avoid `get()` calls for global role checks, a dedicated collection `/roles_admin/{userId}` is used. The mere existence of a document at `roles_admin/$(request.auth.uid)` signifies that `request.auth.uid` is an administrator. This is a prime example of 'Existence over Content' for global roles, ensuring authorization rules are atomic and independent.\n    *   **User Status (`isBlocked`):** When a user attempts to create a `VisitLog`, their `isBlocked` status must be checked. While this necessitates a `get()` call to `users/$(request.auth.uid)`, this is explicitly a *self-authorization* check (a user checking their own profile data), not a hierarchical dependency on a parent document's fields for subcollection access, nor an authorization check for *another* user's data. This approach keeps the `isBlocked` status authoritative and consistent on the user's primary profile.\n    *   **Visit Log Ownership:** Each `VisitLog` document explicitly includes a `userId` field. This denormalizes the ownership context directly into the log entry, enabling atomic write operations and simplifying rules (e.g., `request.auth.uid == request.resource.data.userId`).\n\n2.  **Structural Segregation & QAPs (Query-Accessible Paths):**\n    *   **Users (`/users/{userId}`):** This top-level collection holds individual user profiles. Administrators require QAPs to list all users for management purposes (blocking, searching by name/ID), which a top-level collection facilitates. Individual users can only read/update their own profile via path-based ownership.\n    *   **Visit Logs (`/visit_logs/{visitLogId}`):** This is a top-level collection crucial for administrator QAPs. The application requires administrators to view and analyze *all* library entries, filtered by day, week, month, and specific user IDs or names. Placing `VisitLog` documents in a top-level collection, rather than as subcollections under users, allows for efficient global queries and aggregations required for the admin dashboard's statistics, without relying on costly collection group queries or security rules acting as filters.\n    *   **Colleges (`/colleges/{collegeId}`):** This is also a top-level collection. All authenticated users need to list available colleges (e.g., for selection during login or profile update). A top-level collection provides direct QAP access for all users to read this relatively static data.\n\nBy following these principles, the Firestore structure provides a clear, secure, and performant foundation for the NEU LibLog application. Security rules will be straightforward, focusing on `request.auth.uid` and explicit field values or document existence, minimizing complexity and potential for errors."
+  }
+}

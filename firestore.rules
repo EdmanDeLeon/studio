@@ -1,0 +1,154 @@
+/**
+ * # NEU LibLog Firestore Security Rules
+ *
+ * ## Core Philosophy
+ * This ruleset enforces a strict security model based on two primary roles: standard Users and Administrators.
+ * Standard users have ownership-based access, meaning they can only interact with their own data.
+ * Administrators have broader permissions for system management, reporting, and moderation.
+ * The rules prioritize performance and security by using denormalization and existence checks to make authorization decisions atomic and independent.
+ *
+ * ## Data Structure
+ * The data structure is intentionally flat, using top-level collections to support efficient, targeted queries (Query-Accessible Paths or QAPs).
+ * - /users/{userId}: Stores private user profiles.
+ * - /roles_admin/{userId}: An index collection where the existence of a document grants a user admin privileges.
+ * - /visit_logs/{visitLogId}: A global log of all library visits, accessible by admins for reporting.
+ * - /colleges/{collegeId}: Publicly readable reference data, managed by admins.
+ *
+ * ## Key Security Decisions
+ * - **Administrator Role Management**: Admin status is determined by the existence of a document in `/roles_admin/{userId}`. This is a fast, scalable, and secure "Database-Backed Access Control" (DBAC) pattern that avoids costly `get()` calls in most rules.
+ * - **User Enumeration**: Listing users is disabled for all non-administrators to protect user privacy.
+ * - **Visit Log Immutability**: Standard users can create visit logs, but cannot modify or delete them, preserving the integrity of the audit trail. Admins retain full control.
+ * - **Self-Authorization Check**: Before creating a visit log, the system performs a `get()` on the user's own profile to ensure they are not blocked. This is a secure and acceptable use of `get()` as it is a user checking their own status.
+ *
+ * ## Denormalization for Authorization
+ * To create simpler, more performant rules, data required for authorization is denormalized:
+ * - The `userId` is stored directly on each `/visit_logs` document, allowing ownership checks without extra reads.
+ * - Admin roles are stored in `/roles_admin` instead of a field on the user profile, allowing for a fast `exists()` check that can be used across the entire ruleset.
+ *
+ * ## Structural Segregation
+ * Separate top-level collections are used for distinct data types (`users`, `visit_logs`, `colleges`). This allows for different security and query patterns for each collection. For example, `/visit_logs` can be efficiently queried by administrators, which would be impossible if logs were stored in a subcollection under each user.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // Helper Functions
+    // =====================================================================
+
+    /**
+     * Checks if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the authenticated user's UID matches the provided userId.
+     * This is the foundation of the user-ownership model.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if the user has administrator privileges.
+     * This is determined by the existence of a document in the roles_admin collection.
+     * This is a fast and scalable way to manage global roles.
+     */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    /**
+     * Validates that the user is creating a document for themselves.
+     * Enforces consistency between the document path and the internal data.
+     */
+    function isCreatingOwnDoc(userId) {
+      return isOwner(userId) && request.resource.data.id == userId;
+    }
+
+    /**
+     * Validates if a user is permitted to create a new visit log.
+     * They must be signed in, not blocked, and the log must be for themselves.
+     * This requires reading the user's own profile, a secure self-authorization pattern.
+     */
+    function canCreateVisitLog() {
+      let isCreatingForSelf = request.resource.data.userId == request.auth.uid;
+      let userProfile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let isNotBlocked = userProfile.data.isBlocked == false;
+      return isSignedIn() && isCreatingForSelf && isNotBlocked;
+    }
+
+    // =====================================================================
+    // Collection Rules
+    // =====================================================================
+
+    /**
+     * @description Stores individual user profiles.
+     * @path /users/{userId}
+     * @allow (get/update) A user reads or updates their own profile document.
+     * @allow (create) A new user signs up and creates their own profile document.
+     * @allow (get/list/delete) An administrator reads, lists, or deletes any user's profile.
+     * @deny (list) A non-admin user attempts to list all users in the system.
+     * @deny (delete) A user tries to delete their own account directly.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isCreatingOwnDoc(userId);
+      allow update: if (isOwner(userId) || isAdmin()) && resource != null && request.resource.data.id == resource.data.id;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Manages administrator roles via document existence.
+     * @path /roles_admin/{userId}
+     * @allow (create/delete) An existing admin grants or revokes admin status for another user.
+     * @deny (get/list/create/update/delete) Any non-admin user attempts to interact with this collection.
+     * @principle Enforces Database-Backed Access Control (DBAC) for global roles. Only admins can manage other admins.
+     */
+    match /roles_admin/{userId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Records each library visit.
+     * @path /visit_logs/{visitLogId}
+     * @allow (create) An authenticated, non-blocked user creates a log for their own visit.
+     * @allow (get/list/update/delete) An administrator reads, lists, or manages any visit log for reporting.
+     * @deny (create) A user who is marked as 'isBlocked' tries to create a visit log.
+     * @deny (list) A standard user attempts to view the list of all visit logs.
+     * @deny (update/delete) A standard user attempts to modify or delete their past visit logs.
+     * @principle Enforces self-authorization for creation and provides a queryable path for admin reporting.
+     */
+    match /visit_logs/{visitLogId} {
+      allow get: if isAdmin() || (isOwner(resource.data.userId) && resource != null);
+      allow list: if isAdmin();
+      allow create: if canCreateVisitLog();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Stores information about colleges/departments.
+     * @path /colleges/{collegeId}
+     * @allow (get/list) Any authenticated user reads the list of colleges (e.g., for a dropdown menu).
+     * @allow (create/update/delete) An administrator adds, modifies, or removes a college.
+     * @deny (create/update/delete) A standard user attempts to modify the list of colleges.
+     * @principle Provides public read access for reference data while restricting writes to administrators.
+     */
+    match /colleges/{collegeId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+  }
+}
