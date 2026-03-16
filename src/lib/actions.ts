@@ -46,15 +46,25 @@ export async function categorizeReasonAction(reason: string) {
 }
 
 const visitDetailsSchema = z.object({
-    college: z.string(),
-    reasonForVisit: z.string(),
+    college: z.string({ required_error: "Please select your college." }),
+    reason: z.string({ required_error: "Please select a reason." }),
+    otherReason: z.string().optional(),
     userId: z.string(),
+}).refine(data => {
+    if (data.reason === 'Other') {
+        return data.otherReason && data.otherReason.trim().length >= 10;
+    }
+    return true;
+}, {
+    message: "Please specify your reason (min. 10 characters).",
+    path: ['otherReason'],
 });
 
 export async function submitVisitDetailsAction(prevState: any, formData: FormData) {
     const validatedFields = visitDetailsSchema.safeParse({
         college: formData.get('college'),
-        reasonForVisit: formData.get('reason'),
+        reason: formData.get('reason'),
+        otherReason: formData.get('otherReason'),
         userId: formData.get('userId'),
     });
 
@@ -67,7 +77,9 @@ export async function submitVisitDetailsAction(prevState: any, formData: FormDat
 
     try {
         const { firestore } = initializeFirebase();
-        const { userId, reasonForVisit, college } = validatedFields.data;
+        const { userId, college, reason, otherReason } = validatedFields.data;
+
+        const reasonForVisit = reason === 'Other' ? otherReason : reason;
 
         await addDoc(collection(firestore, 'visit_logs'), {
             userId,
@@ -78,6 +90,6 @@ export async function submitVisitDetailsAction(prevState: any, formData: FormDat
         return { success: true, message: 'Visit logged successfully.' };
     } catch (error) {
         console.error(error);
-        return { success: false, message: 'Failed to log visit.' };
+        return { success: false, message: 'A server error occured.' };
     }
 }

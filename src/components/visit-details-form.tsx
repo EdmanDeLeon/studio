@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm, useFormState } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { useActionState, useEffect } from "react";
 
@@ -9,13 +9,22 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { colleges } from "@/lib/types"
+import { colleges, visitReasons } from "@/lib/types"
 import { submitVisitDetailsAction } from "@/lib/actions";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   college: z.string({ required_error: "Please select your college." }),
-  reason: z.string().min(10, { message: "Please provide a reason for your visit (min. 10 characters)." }),
+  reason: z.string({ required_error: "Please select a reason for your visit." }),
+  otherReason: z.string().optional(),
+}).refine(data => {
+    if (data.reason === 'Other') {
+        return typeof data.otherReason === 'string' && data.otherReason.trim().length >= 10;
+    }
+    return true;
+}, {
+    message: "Please provide a specific reason (min. 10 characters).",
+    path: ["otherReason"], 
 });
 
 type VisitDetailsFormProps = {
@@ -31,8 +40,11 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
     resolver: zodResolver(formSchema),
     defaultValues: {
       reason: "",
+      otherReason: ""
     }
   });
+  
+  const reasonValue = form.watch("reason");
 
   useEffect(() => {
     if (state?.success) {
@@ -79,13 +91,39 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
           render={({ field }) => (
             <FormItem>
               <FormLabel>Reason for Visit</FormLabel>
-              <FormControl>
-                <Textarea placeholder="e.g., Research for thesis, group study for finals, etc." {...field} name="reason" />
-              </FormControl>
-              <FormMessage>{state?.errors?.reasonForVisit?.[0]}</FormMessage>
+              <Select onValueChange={field.onChange} defaultValue={field.value} name="reason">
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a reason" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {visitReasons.map(reason => (
+                    <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage>{state?.errors?.reason?.[0]}</FormMessage>
             </FormItem>
           )}
         />
+
+        {reasonValue === 'Other' && (
+            <FormField
+                control={form.control}
+                name="otherReason"
+                render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Please Specify</FormLabel>
+                    <FormControl>
+                        <Textarea placeholder="e.g., To use a specific software, attend a meeting, etc." {...field} name="otherReason" />
+                    </FormControl>
+                    <FormMessage>{state?.errors?.otherReason?.[0]}</FormMessage>
+                </FormItem>
+                )}
+            />
+        )}
+        
         <Button type="submit" className="w-full" disabled={isPending}>
             {isPending ? 'Submitting...' : 'Submit'}
         </Button>
