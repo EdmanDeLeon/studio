@@ -1,3 +1,4 @@
+'use client';
 import type { Timestamp } from 'firebase/firestore';
 
 export const colleges = [
@@ -30,6 +31,7 @@ export type VisitReason = typeof visitReasons[number];
 
 export type User = {
   id: string;
+  qrCodeIdentifier: string;
   firstName: string;
   lastName: string;
   email: string;

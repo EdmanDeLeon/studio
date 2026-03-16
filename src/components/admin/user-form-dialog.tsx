@@ -44,6 +44,7 @@ const userFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   email: z.string().email("Invalid email address."),
+  qrCodeIdentifier: z.string().min(1, "Student ID is required."),
   college: z.string({ required_error: "Please select a college." }),
   role: z.enum(["user", "admin"], { required_error: "Please select a role." }),
 });
@@ -69,6 +70,7 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
       firstName: "",
       lastName: "",
       email: "",
+      qrCodeIdentifier: "",
       college: undefined,
       role: "user",
     },
@@ -80,6 +82,7 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        qrCodeIdentifier: user.qrCodeIdentifier,
         college: user.college,
         role: user.role,
       });
@@ -180,6 +183,19 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
                 </FormItem>
               )}
             />
+            <FormField
+                control={form.control}
+                name="qrCodeIdentifier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Student ID (for QR/Tap)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="2024-123456" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <FormField
               control={form.control}
               name="college"
