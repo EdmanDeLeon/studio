@@ -90,7 +90,7 @@ service cloud.firestore {
       allow list: if true; // Temporarily open for debugging
       allow create: if true; // Temporarily open for debugging
       allow update: if true; // Temporarily open for debugging
-      allow delete: if isAdmin() && resource != null;
+      allow delete: if true; // Temporarily open for debugging
     }
 
     /**
