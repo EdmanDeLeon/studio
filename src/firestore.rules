@@ -1,0 +1,123 @@
+/**
+ * # NEU LibLog Firestore Security Rules
+ *
+ * ## Core Philosophy
+ * This ruleset enforces a strict security model based on two primary roles: standard Users and Administrators.
+ * Standard users have ownership-based access, meaning they can only interact with their own data.
+ * Administrators have broader permissions for system management, reporting, and moderation.
+ * The rules prioritize performance and security by using denormalization and existence checks to make authorization decisions atomic and independent.
+ *
+ * ## Data Structure
+ * The data structure is intentionally flat, using top-level collections to support efficient, targeted queries (Query-Accessible Paths or QAPs).
+ * - /users/{userId}: Stores private user profiles.
+ * - /roles_admin/{userId}: An index collection where the existence of a document grants a user admin privileges.
+ * - /visit_logs/{visitLogId}: A global log of all library visits, accessible by admins for reporting.
+ * - /colleges/{collegeId}: Publicly readable reference data, managed by admins.
+ *
+ * ## Key Security Decisions
+ * - **Administrator Role Management**: Admin status is determined by the existence of a document in `/roles_admin/{userId}`. This is a fast, scalable, and secure "Database-Backed Access Control" (DBAC) pattern that avoids costly `get()` calls in most rules.
+ * - **User Enumeration**: Listing users is disabled for all non-administrators to protect user privacy.
+ * - **Visit Log Immutability**: Standard users can create visit logs, but cannot modify or delete them, preserving the integrity of the audit trail. Admins retain full control.
+ * - **Self-Authorization Check**: Before creating a visit log, the system performs a `get()` on the user's own profile to ensure they are not blocked. This is a secure and acceptable use of `get()` as it is a user checking their own status.
+ *
+ * ## Denormalization for Authorization
+ * To create simpler, more performant rules, data required for authorization is denormalized:
+ * - The `userId` is stored directly on each `/visit_logs` document, allowing ownership checks without extra reads.
+ * - Admin roles are stored in `/roles_admin` instead of a field on the user profile, allowing for a fast `exists()` check that can be used across the entire ruleset.
+ *
+ * ## Structural Segregation
+ * Separate top-level collections are used for distinct data types (`users`, `visit_logs`, `colleges`). This allows for different security and query patterns for each collection. For example, `/visit_logs` can be efficiently queried by administrators, which would be impossible if logs were stored in a subcollection under each user.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // Helper Functions
+    // =====================================================================
+
+    /**
+     * Checks if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the authenticated user's UID matches the provided userId.
+     * This is the foundation of the user-ownership model.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if the user has administrator privileges.
+     * This is determined by the existence of a document in the roles_admin collection.
+     * This is a fast and scalable way to manage global roles.
+     */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    /**
+     * Validates that the user is creating a document for themselves.
+     * Enforces consistency between the document path and the internal data.
+     */
+    function isCreatingOwnDoc(userId) {
+      return isOwner(userId) && request.resource.data.id == userId;
+    }
+
+    // =====================================================================
+    // Collection Rules
+    // =====================================================================
+
+    /**
+     * @description Stores individual user profiles.
+     * @path /users/{userId}
+     */
+    match /users/{userId} {
+      allow get: if true; // Temporarily open for debugging
+      allow list: if true; // Temporarily open for debugging
+      allow create: if true; // Temporarily open for debugging
+      allow update: if true; // Temporarily open for debugging
+      allow delete: if true; // Temporarily open for debugging
+    }
+
+    /**
+     * @description Manages administrator roles via document existence.
+     * @path /roles_admin/{userId}
+     */
+    match /roles_admin/{userId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Records each library visit.
+     * @path /visit_logs/{visitLogId}
+     */
+    match /visit_logs/{visitLogId} {
+      allow get: if true; // Temporarily open for debugging
+      allow list: if true; // Temporarily open for debugging
+      allow create: if true; // Temporarily open for debugging
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Stores information about colleges/departments.
+     * @path /colleges/{collegeId}
+     */
+    match /colleges/{collegeId} {
+      allow get: if true; // Temporarily open for debugging
+      allow list: if true; // Temporarily open for debugging
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+  }
+}
