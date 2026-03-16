@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { BookCopy, CalendarClock, PieChart as PieChartIcon, UserCheck, Users } from 'lucide-react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { collection } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { VisitLog, User, College } from '@/lib/types';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { AiCategorizerDialog } from '@/components/admin/ai-categorizer-dialog';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { mockUsers, mockVisitLogs } from '@/lib/data';
 
 type TimeFrame = 'day' | 'week' | 'month';
 
@@ -70,17 +70,20 @@ const reasonChartConfig = {
   },
 } satisfies ChartConfig;
 
+const getDate = (time: Timestamp | Date) => {
+    if (time instanceof Date) {
+        return time;
+    }
+    return time.toDate();
+}
 
 export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
   const [filteredLogs, setFilteredLogs] = useState<VisitLog[]>([]);
-  const firestore = useFirestore();
 
-  const visitLogsQuery = useMemoFirebase(() => collection(firestore, 'visit_logs'), [firestore]);
-  const { data: visitLogs, isLoading: isLoadingLogs } = useCollection<VisitLog>(visitLogsQuery);
-
-  const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
-  const { data: users, isLoading: isLoadingUsers } = useCollection<User>(usersQuery);
+  const { data: visitLogs } = { data: mockVisitLogs };
+  const { data: users } = { data: mockUsers };
+  const isLoading = false;
 
   const usersById = useMemo(() => {
     if (!users) return new Map();
@@ -98,7 +101,7 @@ export default function DashboardPage() {
       } else { // month
         interval = { start: startOfMonth(now), end: endOfMonth(now) };
       }
-      const newLogs = visitLogs.filter(log => log.entryTime && isWithinInterval(log.entryTime.toDate(), interval));
+      const newLogs = visitLogs.filter(log => log.entryTime && isWithinInterval(getDate(log.entryTime), interval));
       setFilteredLogs(newLogs);
     }
   }, [timeFrame, visitLogs]);
@@ -144,7 +147,7 @@ export default function DashboardPage() {
     if (filteredLogs.length === 0) return 'N/A';
     const hourCounts = filteredLogs.reduce((acc, log) => {
       if (!log.entryTime) return acc;
-      const hour = format(log.entryTime.toDate(), 'H'); // 24-hour format
+      const hour = format(getDate(log.entryTime), 'H'); // 24-hour format
       acc[hour] = (acc[hour] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -163,8 +166,6 @@ export default function DashboardPage() {
 
     return 'N/A';
   }, [filteredLogs]);
-
-  const isLoading = isLoadingLogs || isLoadingUsers;
 
   return (
     <div className="space-y-6">
@@ -319,8 +320,8 @@ function RecentVisitsTable({ logs, usersById }: { logs: VisitLog[], usersById: M
                 </TableCell>
                 <TableCell className="text-right">
                     {log.entryTime && <>
-                        <div className="font-medium">{format(log.entryTime.toDate(), 'p')}</div>
-                        <div className="text-xs text-muted-foreground">{format(log.entryTime.toDate(), 'MMM d')}</div>
+                        <div className="font-medium">{format(getDate(log.entryTime), 'p')}</div>
+                        <div className="text-xs text-muted-foreground">{format(getDate(log.entryTime), 'MMM d')}</div>
                     </>}
                 </TableCell>
               </TableRow>

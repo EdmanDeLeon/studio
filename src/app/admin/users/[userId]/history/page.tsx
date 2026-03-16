@@ -1,13 +1,12 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo } from 'react';
-import { doc, collection, query, where, orderBy } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
+import type { Timestamp } from 'firebase/firestore';
 
-import { useDoc, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import type { User, VisitLog } from '@/lib/types';
+import { mockUsers, mockVisitLogs } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,30 +14,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 
+const getDate = (time: Timestamp | Date) => {
+    if (time instanceof Date) {
+        return time;
+    }
+    return time.toDate();
+}
+
 export default function UserHistoryPage() {
   const router = useRouter();
   const params = useParams();
   const userId = params.userId as string;
 
-  const firestore = useFirestore();
-
-  const userDocRef = useMemoFirebase(() => {
-      if (!userId) return null;
-      return doc(firestore, 'users', userId);
-  }, [firestore, userId]);
-  const { data: user, isLoading: isUserLoading } = useDoc<User>(userDocRef);
-
-  const visitLogsQuery = useMemoFirebase(() => {
-      if (!userId) return null;
-      return query(
-          collection(firestore, 'visit_logs'),
-          where('userId', '==', userId),
-          orderBy('entryTime', 'desc')
-      );
-  }, [firestore, userId]);
-  const { data: visitLogs, isLoading: areLogsLoading } = useCollection<VisitLog>(visitLogsQuery);
-
-  const isLoading = isUserLoading || areLogsLoading;
+  const user = mockUsers.find(u => u.id === userId);
+  const visitLogs = mockVisitLogs.filter(log => log.userId === userId);
+  const isLoading = false;
 
   return (
     <div className="space-y-6">
@@ -53,7 +43,7 @@ export default function UserHistoryPage() {
         </div>
       </div>
       
-      {isUserLoading ? (
+      {isLoading ? (
         <Card>
           <CardHeader className="flex flex-row items-center gap-4">
             <Skeleton className="h-16 w-16 rounded-full" />
@@ -115,8 +105,8 @@ export default function UserHistoryPage() {
                     <TableCell className="text-right">
                       {log.entryTime ? (
                         <>
-                          <div>{format(log.entryTime.toDate(), 'MMMM d, yyyy')}</div>
-                          <div className="text-sm text-muted-foreground">{format(log.entryTime.toDate(), 'p')}</div>
+                          <div>{format(getDate(log.entryTime), 'MMMM d, yyyy')}</div>
+                          <div className="text-sm text-muted-foreground">{format(getDate(log.entryTime), 'p')}</div>
                         </>
                       ) : 'No timestamp'}
                     </TableCell>

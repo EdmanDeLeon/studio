@@ -45,6 +45,6 @@ export type VisitLog = {
   id: string;
   userId: string;
   reasonForVisit: VisitReason | string;
-  entryTime: Timestamp;
+  entryTime: Timestamp | Date;
   college?: College;
 };

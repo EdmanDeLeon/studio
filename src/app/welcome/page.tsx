@@ -3,15 +3,14 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookHeart, CircleUserRound } from 'lucide-react';
-import { collection, query, where } from 'firebase/firestore';
 
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VisitDetailsForm } from '@/components/visit-details-form';
 import { Logo } from '@/components/logo';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { User } from '@/lib/types';
+import { mockUsers } from '@/lib/data';
 
 function WelcomeComponent() {
   const [isFormOpen, setIsFormOpen] = useState(true);
@@ -20,15 +19,9 @@ function WelcomeComponent() {
   const router = useRouter();
   
   const email = searchParams.get('email');
-  const firestore = useFirestore();
-
-  const userQuery = useMemoFirebase(() => {
-    if (!email) return null;
-    return query(collection(firestore, 'users'), where('email', '==', email));
-  }, [firestore, email]);
-
-  const { data: users, isLoading: isUserLoading } = useCollection<User>(userQuery);
-  const user = users?.[0];
+  const isUserLoading = false;
+  
+  const user = email ? mockUsers.find(u => u.email === email) : undefined;
 
   const handleFormSubmit = () => {
     setIsFormOpen(false);

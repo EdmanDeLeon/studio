@@ -4,14 +4,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useState } from "react";
-import { collection, serverTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { visitReasons, type College } from "@/lib/types";
-import { useFirestore, addDocumentNonBlocking } from "@/firebase";
 
 const formSchema = z.object({
   reason: z.string({ required_error: "Please select a reason for your visit." }),
@@ -35,7 +33,6 @@ type VisitDetailsFormProps = {
 };
 
 export function VisitDetailsForm({ onSubmitSuccess, userId, userCollege }: VisitDetailsFormProps) {
-  const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
 
   const form = useForm<VisitDetailsFormData>({
@@ -51,17 +48,16 @@ export function VisitDetailsForm({ onSubmitSuccess, userId, userCollege }: Visit
   const onSubmit = (data: VisitDetailsFormData) => {
     setIsPending(true);
     
-    const visitLogCollection = collection(firestore, 'visit_logs');
-    const reasonForVisit = data.reason === 'Other' ? data.otherReason : data.reason;
-
-    addDocumentNonBlocking(visitLogCollection, {
-        userId,
-        college: userCollege,
-        reasonForVisit,
-        entryTime: serverTimestamp(),
+    // This is a non-blocking mock submission.
+    // In a real app, this would write to the database.
+    console.log("Submitting visit log (mock):", {
+      userId,
+      college: userCollege,
+      reasonForVisit: data.reason === 'Other' ? data.otherReason : data.reason,
+      entryTime: new Date(),
     });
     
-    // The write is non-blocking, so we can immediately call success.
+    // Immediately call success as we are not waiting for a database write.
     onSubmitSuccess();
   };
 

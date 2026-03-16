@@ -5,7 +5,6 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { doc, collection } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +36,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@/lib/types";
 import { colleges } from "@/lib/types";
-import { useFirestore, setDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const userFormSchema = z.object({
@@ -55,11 +53,11 @@ type UserFormDialogProps = {
   users: User[];
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  onFormSubmit: (user: User) => void;
 };
 
-export function UserFormDialog({ user, users, open, onOpenChange }: UserFormDialogProps) {
+export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }: UserFormDialogProps) {
   const { toast } = useToast();
-  const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
   const isEditMode = !!user;
 
@@ -91,56 +89,50 @@ export function UserFormDialog({ user, users, open, onOpenChange }: UserFormDial
   const onSubmit = async (data: UserFormData) => {
     setIsPending(true);
     
-    try {
-        if (isEditMode && user) {
-            const userRef = doc(firestore, 'users', user.id);
-            updateDocumentNonBlocking(userRef, data);
-        } else {
-            const currentYear = new Date().getFullYear();
-            let maxIdNum = 0;
-            if (users && users.length > 0) {
-              for (const u of users) {
-                if (u.qrCodeIdentifier && u.qrCodeIdentifier.includes('-')) {
-                  const numPart = parseInt(u.qrCodeIdentifier.split('-')[1], 10);
-                  if (!isNaN(numPart) && numPart > maxIdNum) {
-                    maxIdNum = numPart;
-                  }
-                }
+    let submittedUser: User;
+
+    if (isEditMode && user) {
+        submittedUser = { ...user, ...data };
+    } else {
+        const currentYear = new Date().getFullYear();
+        let maxIdNum = 0;
+        if (users && users.length > 0) {
+          for (const u of users) {
+            if (u.qrCodeIdentifier && u.qrCodeIdentifier.includes('-')) {
+              const numPart = parseInt(u.qrCodeIdentifier.split('-')[1], 10);
+              if (!isNaN(numPart) && numPart > maxIdNum) {
+                maxIdNum = numPart;
               }
             }
-            const nextIdNum = maxIdNum + 1;
-            const newQrCodeIdentifier = `${currentYear}-${String(nextIdNum).padStart(6, '0')}`;
-
-            const newDocRef = doc(collection(firestore, 'users'));
-            const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
-            const avatarIndex = (newDocRef.id.charCodeAt(0) || 0) % avatarPlaceholders.length;
-            const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
-    
-            setDocumentNonBlocking(newDocRef, {
-                ...data,
-                id: newDocRef.id,
-                qrCodeIdentifier: newQrCodeIdentifier,
-                isBlocked: false,
-                avatarUrl: randomAvatar,
-            }, { merge: true });
+          }
         }
+        const nextIdNum = maxIdNum + 1;
+        const newQrCodeIdentifier = `${currentYear}-${String(nextIdNum).padStart(6, '0')}`;
         
-        toast({
-            title: `User ${isEditMode ? "Updated" : "Added"}`,
-            description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
-        });
-        onOpenChange(false);
+        // simple hash for a unique-ish ID for mock data
+        const newId = `mock-${Date.now()}-${Math.random()}`;
+        const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
+        const avatarIndex = (newId.charCodeAt(5) || 0) % avatarPlaceholders.length;
+        const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
 
-    } catch (error) {
-        console.error("Form submission error:", error);
-        toast({
-            variant: "destructive",
-            title: `Failed to ${isEditMode ? "update" : "add"} user`,
-            description: "An unexpected error occurred on the client.",
-        });
-    } finally {
-        setIsPending(false);
+        submittedUser = {
+            ...data,
+            id: newId,
+            qrCodeIdentifier: newQrCodeIdentifier,
+            isBlocked: false,
+            avatarUrl: randomAvatar,
+        };
     }
+    
+    onFormSubmit(submittedUser);
+    
+    toast({
+        title: `User ${isEditMode ? "Updated" : "Added"}`,
+        description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
+    });
+    
+    setIsPending(false);
+    onOpenChange(false);
   };
 
   return (

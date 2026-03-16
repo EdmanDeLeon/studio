@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import { MoreHorizontal, Search, UserPlus, Trash2, History } from 'lucide-react';
-import { doc, collection } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -38,8 +37,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import type { User } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { UserFormDialog } from '@/components/admin/user-form-dialog';
+import { mockUsers } from '@/lib/data';
 
 export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,16 +46,14 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | undefined>(undefined);
+  
+  const [users, setUsers] = useState<User[]>(mockUsers);
+  const isLoading = false;
 
   const { toast } = useToast();
-  const firestore = useFirestore();
   const router = useRouter();
 
-  const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
-  const { data: users = [], isLoading } = useCollection<User>(usersQuery);
-
   const filteredUsers = useMemo(() => {
-    if (!users) return [];
     const sortedUsers = [...users].sort((a, b) => a.lastName.localeCompare(b.lastName));
     if (!searchTerm) return sortedUsers;
     return sortedUsers.filter(user =>
@@ -75,6 +72,14 @@ export default function UserManagementPage() {
     setSelectedUser(user);
     setIsFormOpen(true);
   }
+  
+  const handleFormSubmit = (submittedUser: User) => {
+    if (selectedUser) { // Edit mode
+        setUsers(users.map(u => u.id === submittedUser.id ? submittedUser : u));
+    } else { // Add mode
+        setUsers([...users, submittedUser]);
+    }
+  };
 
   const handleViewHistory = (userId: string) => {
     router.push(`/admin/users/${userId}/history`);
@@ -88,8 +93,7 @@ export default function UserManagementPage() {
   const confirmDelete = () => {
     if (!userToDelete) return;
 
-    const userRef = doc(firestore, 'users', userToDelete.id);
-    deleteDocumentNonBlocking(userRef);
+    setUsers(users.filter(u => u.id !== userToDelete.id));
 
     toast({
       title: "User Deleted",
@@ -100,10 +104,8 @@ export default function UserManagementPage() {
     setUserToDelete(undefined);
   };
 
-
   const toggleUserStatus = (userId: string, currentBlockedStatus: boolean) => {
-    const userRef = doc(firestore, 'users', userId);
-    updateDocumentNonBlocking(userRef, { isBlocked: !currentBlockedStatus });
+    setUsers(users.map(u => u.id === userId ? { ...u, isBlocked: !currentBlockedStatus } : u));
     
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -222,7 +224,13 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
     </div>
-    <UserFormDialog user={selectedUser} users={users} open={isFormOpen} onOpenChange={setIsFormOpen} />
+    <UserFormDialog 
+        user={selectedUser} 
+        users={users} 
+        open={isFormOpen} 
+        onOpenChange={setIsFormOpen}
+        onFormSubmit={handleFormSubmit}
+    />
     <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
             <AlertDialogHeader>
