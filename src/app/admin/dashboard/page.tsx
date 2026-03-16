@@ -74,7 +74,6 @@ const reasonChartConfig = {
 export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
   const [filteredLogs, setFilteredLogs] = useState<VisitLog[]>([]);
-  const [isClient, setIsClient] = useState(false);
   const firestore = useFirestore();
 
   const visitLogsQuery = useMemoFirebase(() => collection(firestore, 'visit_logs'), [firestore]);
@@ -89,11 +88,7 @@ export default function DashboardPage() {
   }, [users]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    if (isClient && visitLogs) {
+    if (visitLogs) {
       const now = new Date();
       let interval;
       if (timeFrame === 'day') {
@@ -103,10 +98,10 @@ export default function DashboardPage() {
       } else { // month
         interval = { start: startOfMonth(now), end: endOfMonth(now) };
       }
-      const newLogs = visitLogs.filter(log => isWithinInterval(log.entryTime.toDate(), interval));
+      const newLogs = visitLogs.filter(log => log.entryTime && isWithinInterval(log.entryTime.toDate(), interval));
       setFilteredLogs(newLogs);
     }
-  }, [timeFrame, isClient, visitLogs]);
+  }, [timeFrame, visitLogs]);
 
   const totalVisits = filteredLogs.length;
   const uniqueVisitors = new Set(filteredLogs.map(log => log.userId)).size;
@@ -114,11 +109,12 @@ export default function DashboardPage() {
   const visitsByCollege = useMemo(() => {
     const counts = filteredLogs.reduce((acc, log) => {
       const user = usersById.get(log.userId);
-      if (user) {
-        acc[user.college] = (acc[user.college] || 0) + 1;
+      const college = user?.college || log.college;
+      if (college) {
+        acc[college] = (acc[college] || 0) + 1;
       }
       return acc;
-    }, {} as Record<College, number>);
+    }, {} as Record<string, number>);
 
     return Object.entries(counts)
       .map(([name, total]) => ({ name, total }))
@@ -128,7 +124,7 @@ export default function DashboardPage() {
   const visitsByReason = useMemo(() => {
     if (filteredLogs.length === 0) return [];
     const reasonCounts = filteredLogs.reduce((acc, log) => {
-        const reason = typeof log.reasonForVisit === 'string' ? log.reasonForVisit : 'Other';
+        const reason = typeof log.reasonForVisit === 'string' && log.reasonForVisit.trim() !== '' ? log.reasonForVisit : 'Other';
         acc[reason] = (acc[reason] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
@@ -147,6 +143,7 @@ export default function DashboardPage() {
   const peakHour = useMemo(() => {
     if (filteredLogs.length === 0) return 'N/A';
     const hourCounts = filteredLogs.reduce((acc, log) => {
+      if (!log.entryTime) return acc;
       const hour = format(log.entryTime.toDate(), 'H'); // 24-hour format
       acc[hour] = (acc[hour] || 0) + 1;
       return acc;
@@ -303,23 +300,28 @@ function RecentVisitsTable({ logs, usersById }: { logs: VisitLog[], usersById: M
         <TableBody>
           {logs.map((log) => {
             const user = usersById.get(log.userId);
+            const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
+            const userCollege = user?.college || log.college || 'N/A';
+
             return (
               <TableRow key={log.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="hidden h-9 w-9 sm:flex">
-                      <AvatarImage src={user?.avatarUrl} alt={user?.name} />
-                      <AvatarFallback>{user?.name?.charAt(0) || 'U'}</AvatarFallback>
+                      <AvatarImage src={user?.avatarUrl} alt={userName} />
+                      <AvatarFallback>{user?.firstName?.charAt(0) || 'U'}{user?.lastName?.charAt(0) || ''}</AvatarFallback>
                     </Avatar>
                     <div className="grid gap-0.5">
-                      <p className="font-medium">{user?.name || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground">{user?.college || 'N/A'}</p>
+                      <p className="font-medium">{userName}</p>
+                      <p className="text-xs text-muted-foreground">{userCollege}</p>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="font-medium">{format(log.entryTime.toDate(), 'p')}</div>
-                  <div className="text-xs text-muted-foreground">{format(log.entryTime.toDate(), 'MMM d')}</div>
+                    {log.entryTime && <>
+                        <div className="font-medium">{format(log.entryTime.toDate(), 'p')}</div>
+                        <div className="text-xs text-muted-foreground">{format(log.entryTime.toDate(), 'MMM d')}</div>
+                    </>}
                 </TableCell>
               </TableRow>
             )

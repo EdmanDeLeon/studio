@@ -30,7 +30,8 @@ export type VisitReason = typeof visitReasons[number];
 
 export type User = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   college: College;
   role: 'admin' | 'user';

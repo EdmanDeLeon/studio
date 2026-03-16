@@ -27,6 +27,7 @@ const menuItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const adminName = `${mockAdmin.firstName} ${mockAdmin.lastName}`;
 
   return (
     <SidebarProvider>
@@ -57,11 +58,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <SidebarFooter>
           <div className="flex items-center gap-3">
              <Avatar className="h-9 w-9">
-                <AvatarImage src={mockAdmin.avatarUrl} alt={mockAdmin.name} />
-                <AvatarFallback>{mockAdmin.name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={mockAdmin.avatarUrl} alt={adminName} />
+                <AvatarFallback>{mockAdmin.firstName.charAt(0)}{mockAdmin.lastName.charAt(0)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col text-sm group-data-[collapsible=icon]:hidden">
-                <span className="font-semibold text-sidebar-foreground">{mockAdmin.name}</span>
+                <span className="font-semibold text-sidebar-foreground">{adminName}</span>
                 <span className="text-xs text-sidebar-foreground/70">{mockAdmin.email}</span>
             </div>
           </div>

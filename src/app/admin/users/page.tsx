@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { MoreHorizontal, Search, UserPlus } from 'lucide-react';
+import { MoreHorizontal, Search, UserPlus, Trash2 } from 'lucide-react';
 import { doc, collection } from 'firebase/firestore';
 import {
   DropdownMenu,
@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   Table,
@@ -18,6 +19,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,9 +37,16 @@ import { Input } from '@/components/ui/input';
 import type { User } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { UserFormDialog } from '@/components/admin/user-form-dialog';
+import { deleteUserAction } from '@/lib/actions';
 
 export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | undefined>(undefined);
+
   const { toast } = useToast();
   const firestore = useFirestore();
 
@@ -37,13 +55,49 @@ export default function UserManagementPage() {
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
-    if (!searchTerm) return users;
-    return users.filter(user =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const sortedUsers = [...users].sort((a, b) => a.lastName.localeCompare(b.lastName));
+    if (!searchTerm) return sortedUsers;
+    return sortedUsers.filter(user =>
+      `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.id.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [users, searchTerm]);
+
+  const handleAddUser = () => {
+    setSelectedUser(undefined);
+    setIsFormOpen(true);
+  }
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setIsFormOpen(true);
+  }
+
+  const handleDeleteUser = (user: User) => {
+    setUserToDelete(user);
+    setIsDeleteAlertOpen(true);
+  }
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+    const result = await deleteUserAction(userToDelete.id);
+    if (result.success) {
+      toast({
+        title: "User Deleted",
+        description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: result.message,
+      });
+    }
+    setIsDeleteAlertOpen(false);
+    setUserToDelete(undefined);
+  };
+
 
   const toggleUserStatus = (userId: string, currentBlockedStatus: boolean) => {
     const userRef = doc(firestore, 'users', userId);
@@ -53,12 +107,13 @@ export default function UserManagementPage() {
     if (user) {
         toast({
             title: `User ${!currentBlockedStatus ? 'Blocked' : 'Unblocked'}`,
-            description: `${user.name}'s status has been updated.`,
+            description: `${user.firstName} ${user.lastName}'s status has been updated.`,
         });
     }
   };
 
   return (
+    <>
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
@@ -83,7 +138,7 @@ export default function UserManagementPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <Button>
+              <Button onClick={handleAddUser}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add User
               </Button>
@@ -116,11 +171,11 @@ export default function UserManagementPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatarUrl} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={user.avatarUrl} alt={`${user.firstName} ${user.lastName}`} />
+                        <AvatarFallback>{user.firstName?.charAt(0) ?? ''}{user.lastName?.charAt(0) ?? ''}</AvatarFallback>
                       </Avatar>
                       <div className="grid gap-0.5">
-                        <p className="font-medium">{user.name}</p>
+                        <p className="font-medium">{user.firstName} {user.lastName}</p>
                         <p className="text-xs text-muted-foreground">{user.email}</p>
                       </div>
                     </div>
@@ -142,9 +197,14 @@ export default function UserManagementPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditUser(user)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleUserStatus(user.id, user.isBlocked)}>
                           {user.isBlocked ? 'Unblock' : 'Block'}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(user)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -156,5 +216,25 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
     </div>
+    <UserFormDialog user={selectedUser} open={isFormOpen} onOpenChange={setIsFormOpen}>
+        {/* This is a dummy trigger, the dialog is controlled by state */}
+        <span /> 
+    </UserFormDialog>
+    <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the user account
+                for {userToDelete?.firstName} {userToDelete?.lastName} and remove their data from our servers.
+            </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
