@@ -36,9 +36,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import type { User } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { UserFormDialog } from '@/components/admin/user-form-dialog';
-import { deleteUserAction } from '@/lib/actions';
 
 export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,21 +78,17 @@ export default function UserManagementPage() {
     setIsDeleteAlertOpen(true);
   }
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!userToDelete) return;
-    const result = await deleteUserAction(userToDelete.id);
-    if (result.success) {
-      toast({
-        title: "User Deleted",
-        description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
-      });
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: result.message,
-      });
-    }
+
+    const userRef = doc(firestore, 'users', userToDelete.id);
+    deleteDocumentNonBlocking(userRef);
+
+    toast({
+      title: "User Deleted",
+      description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
+    });
+
     setIsDeleteAlertOpen(false);
     setUserToDelete(undefined);
   };

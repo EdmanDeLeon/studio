@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import { UserPlus, Loader2 } from "lucide-react";
+import { doc, collection } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +37,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@/lib/types";
 import { colleges } from "@/lib/types";
-import { addUserAction, updateUserAction } from "@/lib/actions";
+import { useFirestore, setDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const userFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
@@ -57,6 +59,7 @@ type UserFormDialogProps = {
 
 export function UserFormDialog({ user, children, open, onOpenChange }: UserFormDialogProps) {
   const { toast } = useToast();
+  const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
   const isEditMode = !!user;
 
@@ -87,26 +90,41 @@ export function UserFormDialog({ user, children, open, onOpenChange }: UserFormD
 
   const onSubmit = async (data: UserFormData) => {
     setIsPending(true);
-    const action = isEditMode
-      ? updateUserAction.bind(null, user.id)
-      : addUserAction;
-      
-    const result = await action(data);
+    
+    try {
+        if (isEditMode && user) {
+            const userRef = doc(firestore, 'users', user.id);
+            updateDocumentNonBlocking(userRef, data);
+        } else {
+            const newDocRef = doc(collection(firestore, 'users'));
+            const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
+            const avatarIndex = (newDocRef.id.charCodeAt(0) || 0) % avatarPlaceholders.length;
+            const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
+    
+            setDocumentNonBlocking(newDocRef, {
+                ...data,
+                id: newDocRef.id,
+                isBlocked: false,
+                avatarUrl: randomAvatar,
+            }, { merge: true });
+        }
+        
+        toast({
+            title: `User ${isEditMode ? "Updated" : "Added"}`,
+            description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
+        });
+        onOpenChange(false);
 
-    if (result.success) {
-      toast({
-        title: `User ${isEditMode ? "Updated" : "Added"}`,
-        description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
-      });
-      onOpenChange(false);
-    } else {
-      toast({
-        variant: "destructive",
-        title: `Failed to ${isEditMode ? "update" : "add"} user`,
-        description: result.message,
-      });
+    } catch (error) {
+        console.error("Form submission error:", error);
+        toast({
+            variant: "destructive",
+            title: `Failed to ${isEditMode ? "update" : "add"} user`,
+            description: "An unexpected error occurred on the client.",
+        });
+    } finally {
+        setIsPending(false);
     }
-    setIsPending(false);
   };
 
   return (
