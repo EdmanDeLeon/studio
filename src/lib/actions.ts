@@ -23,7 +23,7 @@ export async function loginAction(prevState: any, formData: FormData) {
 
   // In a real app, you would look up the user in your database
   if (email.endsWith('@neu.edu.ph')) {
-    return { role: 'admin' };
+    return { role: 'admin', email: email };
   }
   
   if (email.endsWith('@neu.edu')) {

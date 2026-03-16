@@ -3,13 +3,14 @@
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useActionState } from 'react';
-import { KeyRound, Mail, QrCode } from 'lucide-react';
+import { KeyRound, Mail, QrCode, LayoutDashboard, LogIn } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from '@/lib/actions';
 import { Logo } from '@/components/logo';
@@ -29,11 +30,12 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [initialState, setInitialState] = useState<any>({});
   const [state, formAction] = useActionState(loginAction, initialState);
+  const [showAdminChoice, setShowAdminChoice] = useState(false);
 
   useEffect(() => {
-    if (state?.role === 'admin') {
-      toast({ title: 'Admin login successful', description: 'Redirecting to dashboard...' });
-      router.push('/admin/dashboard');
+    if (state?.role === 'admin' && state.email) {
+      toast({ title: 'Admin login successful', description: 'Please choose how to proceed.' });
+      setShowAdminChoice(true);
     } else if (state?.role === 'user' && state.email) {
       toast({ title: 'Login successful!', description: 'Please provide your visit details.' });
       router.push(`/welcome?email=${encodeURIComponent(state.email)}`);
@@ -50,6 +52,15 @@ export default function LoginPage() {
     // Simulate a successful QR scan for a regular user
     toast({ title: 'QR Scan Successful!', description: 'Please provide your visit details.' });
     router.push('/welcome');
+  };
+  
+  const handleAdminChoice = (destination: 'dashboard' | 'visit') => {
+    setShowAdminChoice(false);
+    if (destination === 'dashboard') {
+        router.push('/admin/dashboard');
+    } else {
+        router.push(`/welcome?email=${encodeURIComponent(state.email)}`);
+    }
   };
 
   return (
@@ -92,6 +103,27 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showAdminChoice} onOpenChange={setShowAdminChoice}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Choose Your Destination</DialogTitle>
+                <DialogDescription>
+                    You've logged in as an administrator. How would you like to proceed?
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2">
+                <Button variant="outline" onClick={() => handleAdminChoice('visit')}>
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Log a Personal Visit
+                </Button>
+                <Button onClick={() => handleAdminChoice('dashboard')}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Go to Dashboard
+                </Button>
+            </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
