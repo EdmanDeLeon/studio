@@ -110,8 +110,7 @@ service cloud.firestore {
      * @path /visit_logs/{visitLogId}
      */
     match /visit_logs/{visitLogId} {
-      allow get: if true; // Temporarily open for debugging
-      allow list: if true; // Temporarily open for debugging
+      allow read: if true; // Temporarily open for debugging
       allow create: if true; // Temporarily open for debugging
       allow update: if isAdmin() && resource != null;
       allow delete: if isAdmin() && resource != null;
