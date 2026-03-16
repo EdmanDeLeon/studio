@@ -1,38 +1,24 @@
-/**
- * # NEU LibLog Firestore Security Rules
- *
- * ## Core Philosophy
- * This ruleset enforces a strict security model based on two primary roles: standard Users and Administrators.
- * Standard users have ownership-based access, meaning they can only interact with their own data.
- * Administrators have broader permissions for system management, reporting, and moderation.
- * The rules prioritize performance and security byusing denormalization and existence checks to make authorization decisions atomic and independent.
- *
- * ## Data Structure
- * The data structure is intentionally flat, using top-level collections to support efficient, targeted queries (Query-Accessible Paths or QAPs).
- * - /users/{userId}: Stores private user profiles.
- * - /roles_admin/{userId}: An index collection where the existence of a document grants a user admin privileges.
- * - /visit_logs/{visitLogId}: A global log of all library visits, accessible by admins for reporting.
- * - /colleges/{collegeId}: Publicly readable reference data, managed by admins.
- *
- * ## Key Security Decisions
- * - **Administrator Role Management**: Admin status is determined by the existence of a document in `/roles_admin/{userId}`. This is a fast, scalable, and secure "Database-Backed Access Control" (DBAC) pattern that avoids costly `get()` calls in most rules.
- * - **User Enumeration**: Listing users is disabled for all non-administrators to protect user privacy.
- * - **Visit Log Immutability**: Standard users can create visit logs, but cannot modify or delete them, preserving the integrity of the audit trail. Admins retain full control.
- * - **Self-Authorization Check**: Before creating a visit log, the system performs a `get()` on the user's own profile to ensure they are not blocked. This is a secure and acceptable use of `get()` as it is a user checking their own status.
- *
- * ## Denormalization for Authorization
- * To create simpler, more performant rules, data required for authorization is denormalized:
- * - The `userId` is stored directly on each `/visit_logs` document, allowing ownership checks without extra reads.
- * - Admin roles are stored in `/roles_admin` instead of a field on the user profile, allowing for a fast `exists()` check that can be used across the entire ruleset.
- *
- * ## Structural Segregation
- * Separate top-level collections are used for distinct data types (`users`, `visit_logs`, `colleges`). This allows for different security and query patterns for each collection. For example, `/visit_logs` can be efficiently queried by administrators, which would be impossible if logs were stored in a subcollection under each user.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // WARNING: Temporary rule for debugging. Allows all reads and writes.
-    match /{document=**} {
+
+    // The rules below are temporarily set to be fully open for development purposes.
+    // They allow all reads and writes to all collections, which is insecure for a
+    // production environment. These will be replaced with secure rules later.
+
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /roles_admin/{userId} {
+      allow read, write: if true;
+    }
+
+    match /visit_logs/{visitLogId} {
+      allow read, write: if true;
+    }
+
+    match /colleges/{collegeId} {
       allow read, write: if true;
     }
   }
