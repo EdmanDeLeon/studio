@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { BookCopy, CalendarClock, Clock, UserCheck, Users } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { BookCopy, CalendarClock, PieChart as PieChartIcon, UserCheck, Users } from 'lucide-react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { mockUsers, mockVisitLogs } from '@/lib/data';
 import type { VisitLog, College } from '@/lib/types';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
@@ -17,12 +16,59 @@ import { AiCategorizerDialog } from '@/components/admin/ai-categorizer-dialog';
 
 type TimeFrame = 'day' | 'week' | 'month';
 
-const chartConfig = {
+const collegeChartConfig = {
   total: {
     label: 'Visits',
-    color: 'hsl(var(--primary))',
+    color: 'hsl(var(--chart-1))',
   },
 } satisfies ChartConfig;
+
+const reasonChartConfig = {
+  visits: {
+    label: "Visits",
+  },
+  "Study/Research": {
+    label: "Study/Research",
+    color: "hsl(var(--chart-1))",
+  },
+  "Borrow/Return Books": {
+    label: "Borrow/Return Books",
+    color: "hsl(var(--chart-2))",
+  },
+  "Computer/Internet Access": {
+    label: "Computer/Internet Access",
+    color: "hsl(var(--chart-3))",
+  },
+  "Printing/Scanning": {
+    label: "Printing/Scanning",
+    color: "hsl(var(--chart-4))",
+  },
+  "Quiet Study Area": {
+    label: "Quiet Study Area",
+    color: "hsl(var(--chart-5))",
+  },
+  "Group Study": {
+    label: "Group Study",
+    color: "hsl(var(--chart-1))",
+    theme: {
+        light: 'hsl(var(--chart-1) / 0.8)',
+        dark: 'hsl(var(--chart-1) / 0.8)',
+    }
+  },
+  "Event/Workshop": {
+    label: "Event/Workshop",
+    color: "hsl(var(--chart-2))",
+    theme: {
+        light: 'hsl(var(--chart-2) / 0.8)',
+        dark: 'hsl(var(--chart-2) / 0.8)',
+    }
+  },
+  Other: {
+    label: "Other",
+    color: "hsl(var(--muted))",
+  },
+} satisfies ChartConfig;
+
 
 export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
@@ -38,8 +84,7 @@ export default function DashboardPage() {
       const now = new Date();
       let newLogs: VisitLog[];
       if (timeFrame === 'day') {
-        const yesterday = subDays(now, 1);
-        newLogs = mockVisitLogs.filter(log => log.timestamp > yesterday);
+        newLogs = mockVisitLogs.filter(log => isWithinInterval(log.timestamp, { start: subDays(now, 1), end: now }));
       } else if (timeFrame === 'week') {
         const interval = { start: startOfWeek(now), end: endOfWeek(now) };
         newLogs = mockVisitLogs.filter(log => isWithinInterval(log.timestamp, interval));
@@ -70,18 +115,47 @@ export default function DashboardPage() {
       .sort((a, b) => b.total - a.total);
   }, [filteredLogs]);
 
-  const topVisitReason = useMemo(() => {
-    if (filteredLogs.length === 0) return { reason: 'N/A', count: 0 };
+  const visitsByReason = useMemo(() => {
+    if (filteredLogs.length === 0) return [];
     const reasonCounts = filteredLogs.reduce((acc, log) => {
         const reason = typeof log.reason === 'string' ? log.reason : 'Other';
         acc[reason] = (acc[reason] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
 
-    return Object.entries(reasonCounts).reduce((top, [reason, count]) => 
-        count > top.count ? { reason, count } : top, { reason: '', count: 0 });
+    return Object.entries(reasonCounts)
+        .map(([name, total]) => ({ name, total }))
+        .sort((a, b) => b.total - a.total);
   }, [filteredLogs]);
 
+  const topVisitReason = useMemo(() => {
+      if (visitsByReason.length === 0) return { reason: 'N/A', count: 0 };
+      const top = visitsByReason[0];
+      return { reason: top.name, count: top.total };
+  }, [visitsByReason]);
+
+  const peakHour = useMemo(() => {
+    if (filteredLogs.length === 0) return 'N/A';
+    const hourCounts = filteredLogs.reduce((acc, log) => {
+      const hour = format(log.timestamp, 'H'); // 24-hour format
+      acc[hour] = (acc[hour] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const peak = Object.entries(hourCounts).reduce(
+      (peak, [hour, count]) => (count > peak.count ? { hour, count } : peak),
+      { hour: '', count: 0 }
+    );
+    
+    if (peak.hour) {
+      const date = new Date();
+      date.setHours(parseInt(peak.hour, 10));
+      date.setMinutes(0);
+      return format(date, 'p'); // Format to e.g., 3:00 PM
+    }
+
+    return 'N/A';
+  }, [filteredLogs]);
 
   return (
     <div className="space-y-6">
@@ -110,18 +184,17 @@ export default function DashboardPage() {
         <StatsCard title="Total Visits" value={totalVisits} icon={Users} />
         <StatsCard title="Unique Visitors" value={uniqueVisitors} icon={UserCheck} />
         <StatsCard title="Top Reason" value={topVisitReason.reason} icon={BookCopy} subValue={`${topVisitReason.count} visits`} />
-        <StatsCard title="Peak Hour" value="3:00 PM" icon={CalendarClock} subValue="Busiest time" />
+        <StatsCard title="Peak Hour" value={peakHour} icon={CalendarClock} subValue="Busiest time" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Visits by College</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <ChartContainer config={chartConfig}>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={visitsByCollege}>
+            <ChartContainer config={collegeChartConfig} className="min-h-[300px] w-full">
+                <BarChart data={visitsByCollege} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => value.substring(0, 3)} />
                   <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
@@ -131,20 +204,54 @@ export default function DashboardPage() {
                   />
                   <Bar dataKey="total" fill="var(--color-total)" radius={[4, 4, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
             </ChartContainer>
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Recent Visits</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <PieChartIcon className="size-5" />
+              Visits by Purpose
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <RecentVisitsTable logs={filteredLogs.slice(0, 5)} />
+            <ChartContainer
+                config={reasonChartConfig}
+                className="mx-auto aspect-square max-h-[300px]"
+            >
+                <PieChart>
+                <Tooltip
+                    cursor={{ fill: "hsl(var(--muted))" }}
+                    content={<ChartTooltipContent hideLabel />}
+                />
+                <Pie
+                    data={visitsByReason}
+                    dataKey="total"
+                    nameKey="name"
+                    innerRadius={60}
+                    strokeWidth={5}
+                >
+                    {visitsByReason.map((entry, index) => (
+                        <Cell
+                        key={`cell-${index}`}
+                        fill={reasonChartConfig[entry.name as keyof typeof reasonChartConfig]?.color || 'hsl(var(--muted))'}
+                        />
+                    ))}
+                </Pie>
+                </PieChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Visits</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RecentVisitsTable logs={filteredLogs.slice(0, 10)} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
