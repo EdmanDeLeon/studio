@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from 'recharts';
-import { BookCopy, CalendarClock, PieChart as PieChartIcon, UserCheck, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookCopy, CalendarClock, PieChart as PieChartIcon, UserCheck, Users } from 'lucide-react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import type { Timestamp } from 'firebase/firestore';
 
@@ -16,6 +16,8 @@ import { AiCategorizerDialog } from '@/components/admin/ai-categorizer-dialog';
 import { mockUsers, mockVisitLogs } from '@/lib/data';
 
 type TimeFrame = 'day' | 'week' | 'month';
+type SortKey = 'visitor' | 'reasonForVisit' | 'entryTime';
+type SortDirection = 'asc' | 'desc';
 
 const collegeChartConfig = {
   total: {
@@ -80,6 +82,7 @@ const getDate = (time: Timestamp | Date) => {
 export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
   const [filteredLogs, setFilteredLogs] = useState<VisitLog[]>([]);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'entryTime', direction: 'desc' });
 
   const { data: visitLogs } = { data: mockVisitLogs };
   const { data: users } = { data: mockUsers };
@@ -112,7 +115,7 @@ export default function DashboardPage() {
   const visitsByCollege = useMemo(() => {
     const counts = filteredLogs.reduce((acc, log) => {
       const user = usersById.get(log.userId);
-      const college = user?.college || log.college;
+      const college = user?.college || 'Unknown College';
       if (college) {
         acc[college] = (acc[college] || 0) + 1;
       }
@@ -166,6 +169,42 @@ export default function DashboardPage() {
 
     return 'N/A';
   }, [filteredLogs]);
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prevConfig => {
+      const isAsc = prevConfig.key === key && prevConfig.direction === 'asc';
+      return { key, direction: isAsc ? 'desc' : 'asc' };
+    });
+  };
+
+  const sortedLogs = useMemo(() => {
+    const sortableLogs = [...filteredLogs];
+    sortableLogs.sort((a, b) => {
+        if (sortConfig.key === 'entryTime') {
+            const dateA = getDate(a.entryTime).getTime();
+            const dateB = getDate(b.entryTime).getTime();
+            if (dateA < dateB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (dateA > dateB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        }
+        if (sortConfig.key === 'reasonForVisit') {
+            const reasonA = String(a.reasonForVisit || '');
+            const reasonB = String(b.reasonForVisit || '');
+            if (reasonA < reasonB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (reasonA > reasonB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        }
+        if (sortConfig.key === 'visitor') {
+            const userA = usersById.get(a.userId);
+            const userB = usersById.get(b.userId);
+            const nameA = userA ? `${userA.firstName} ${userA.lastName}` : 'Unknown';
+            const nameB = userB ? `${userB.firstName} ${userB.lastName}` : 'Unknown';
+            return sortConfig.direction === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+        }
+        return 0;
+    });
+    return sortableLogs;
+  }, [filteredLogs, sortConfig, usersById]);
 
   return (
     <div className="space-y-6">
@@ -261,7 +300,12 @@ export default function DashboardPage() {
             <CardTitle>Recent Visits</CardTitle>
           </CardHeader>
           <CardContent>
-            <RecentVisitsTable logs={filteredLogs.slice(0, 10)} usersById={usersById} />
+            <RecentVisitsTable 
+              logs={sortedLogs.slice(0, 10)} 
+              usersById={usersById}
+              onSort={handleSort}
+              sortConfig={sortConfig}
+            />
           </CardContent>
         </Card>
       </>
@@ -285,24 +329,53 @@ function StatsCard({ title, value, icon: Icon, subValue }: { title: string, valu
   );
 }
 
-function RecentVisitsTable({ logs, usersById }: { logs: VisitLog[], usersById: Map<string, User> }) {
+function RecentVisitsTable({ logs, usersById, onSort, sortConfig }: { 
+  logs: VisitLog[], 
+  usersById: Map<string, User>,
+  onSort: (key: SortKey) => void,
+  sortConfig: { key: SortKey, direction: SortDirection } 
+}) {
     if (logs.length === 0) {
       return <p className="text-sm text-muted-foreground text-center py-8">No visits in this time frame.</p>
     }
+
+    const renderSortIcon = (key: SortKey) => {
+      if (sortConfig.key !== key) return null;
+      if (sortConfig.direction === 'asc') {
+        return <ArrowUp className="h-3 w-3" />;
+      }
+      return <ArrowDown className="h-3 w-3" />;
+    };
 
     return (
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Visitor</TableHead>
-            <TableHead>Time In</TableHead>
+            <TableHead className="cursor-pointer" onClick={() => onSort('visitor')}>
+              <div className="flex items-center gap-1">
+                Visitor
+                {renderSortIcon('visitor')}
+              </div>
+            </TableHead>
+            <TableHead className="cursor-pointer" onClick={() => onSort('reasonForVisit')}>
+               <div className="flex items-center gap-1">
+                Reason for Visit
+                {renderSortIcon('reasonForVisit')}
+              </div>
+            </TableHead>
+            <TableHead className="text-right cursor-pointer" onClick={() => onSort('entryTime')}>
+               <div className="flex items-center justify-end gap-1">
+                Time In
+                {renderSortIcon('entryTime')}
+              </div>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {logs.map((log) => {
             const user = usersById.get(log.userId);
             const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
-            const userCollege = user?.college || log.college || 'N/A';
+            const userCollege = user?.college || 'Unknown College';
 
             return (
               <TableRow key={log.id}>
@@ -318,6 +391,7 @@ function RecentVisitsTable({ logs, usersById }: { logs: VisitLog[], usersById: M
                     </div>
                   </div>
                 </TableCell>
+                <TableCell>{log.reasonForVisit}</TableCell>
                 <TableCell className="text-right">
                     {log.entryTime && <>
                         <div className="font-medium">{format(getDate(log.entryTime), 'p')}</div>
