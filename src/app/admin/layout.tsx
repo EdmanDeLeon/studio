@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, BookOpenCheck, Home, LayoutDashboard, LogOut, Settings, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, BookOpenCheck, Clock, Home, LayoutDashboard, LogOut, Settings, Users } from 'lucide-react';
 
 import {
   SidebarProvider,
@@ -24,6 +25,26 @@ const menuItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users', icon: Users },
 ];
+
+function RealTimeClock() {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedTime = currentTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+
+  return (
+    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+      <Clock className="h-4 w-4" />
+      <span>{formattedTime}</span>
+    </div>
+  );
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -75,6 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
              {/* Can add breadcrumbs or page title here */}
           </div>
           <div className="flex items-center gap-4">
+            <RealTimeClock />
             <Button variant="ghost" size="icon" className="rounded-full">
               <Bell className="h-5 w-5" />
               <span className="sr-only">Toggle notifications</span>
