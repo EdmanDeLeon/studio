@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookHeart, CircleUserRound } from 'lucide-react';
 
@@ -46,12 +46,25 @@ function WelcomeComponent() {
     }
   }
 
+  useEffect(() => {
+    if (!isFormOpen) {
+      // After form submission, isFormOpen becomes false.
+      // We show the thank you message and then redirect.
+      const timer = setTimeout(() => {
+        router.push('/login');
+      }, 5000); // 5 seconds
+
+      // Clear the timeout if the component unmounts
+      // to prevent memory leaks or navigation errors.
+      return () => clearTimeout(timer);
+    }
+  }, [isFormOpen, router]);
 
   const handleFormSubmit = () => {
     setIsFormOpen(false);
     toast({
       title: "Welcome to NEU Library!",
-      description: "Your visit has been logged. We wish you a productive time.",
+      description: "Your visit has been logged. You will be redirected shortly.",
       duration: 5000,
     });
   };
