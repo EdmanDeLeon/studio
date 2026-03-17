@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MoreHorizontal, Search, UserPlus, Trash2, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -40,18 +40,47 @@ import { useToast } from '@/hooks/use-toast';
 import { UserFormDialog } from '@/components/admin/user-form-dialog';
 import { mockUsers } from '@/lib/data';
 
+const USERS_STORAGE_KEY = 'neu-liblog-users';
+
 export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>([]);
   
-  const [users, setUsers] = useState<User[]>(mockUsers);
-  const isLoading = false;
-
   const { toast } = useToast();
   const router = useRouter();
+
+  // Load users from localStorage on initial render
+  useEffect(() => {
+    try {
+      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+      if (storedUsers) {
+        setUsers(JSON.parse(storedUsers));
+      } else {
+        // If nothing is in storage, initialize with mock data
+        setUsers(mockUsers);
+      }
+    } catch (error) {
+      console.error("Failed to read from localStorage:", error);
+      setUsers(mockUsers); // Fallback to mock data
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Save users to localStorage whenever the list changes
+  useEffect(() => {
+    try {
+        if (users.length > 0) { // Avoid saving the initial empty state
+            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+        }
+    } catch (error) {
+        console.error("Failed to write to localStorage:", error);
+    }
+  }, [users]);
 
   const filteredUsers = useMemo(() => {
     const sortedUsers = [...users].sort((a, b) => a.lastName.localeCompare(b.lastName));
@@ -75,9 +104,9 @@ export default function UserManagementPage() {
   
   const handleFormSubmit = (submittedUser: User) => {
     if (selectedUser) { // Edit mode
-        setUsers(users.map(u => u.id === submittedUser.id ? submittedUser : u));
+        setUsers(prevUsers => prevUsers.map(u => u.id === submittedUser.id ? submittedUser : u));
     } else { // Add mode
-        setUsers([...users, submittedUser]);
+        setUsers(prevUsers => [...prevUsers, submittedUser]);
     }
   };
 
@@ -93,7 +122,7 @@ export default function UserManagementPage() {
   const confirmDelete = () => {
     if (!userToDelete) return;
 
-    setUsers(users.filter(u => u.id !== userToDelete.id));
+    setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
 
     toast({
       title: "User Deleted",
@@ -105,7 +134,7 @@ export default function UserManagementPage() {
   };
 
   const toggleUserStatus = (userId: string, currentBlockedStatus: boolean) => {
-    setUsers(users.map(u => u.id === userId ? { ...u, isBlocked: !currentBlockedStatus } : u));
+    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, isBlocked: !currentBlockedStatus } : u));
     
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -219,6 +248,13 @@ export default function UserManagementPage() {
                   </TableCell>
                 </TableRow>
               ))}
+               {!isLoading && filteredUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
