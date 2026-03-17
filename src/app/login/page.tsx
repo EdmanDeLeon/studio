@@ -1,11 +1,11 @@
 'use client';
 
-import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { KeyRound, Mail, QrCode, LayoutDashboard, LogIn } from 'lucide-react';
+import { useEffect, useState, FormEvent } from 'react';
+import { KeyRound, Mail, QrCode, LayoutDashboard, LogIn, Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth } from '@/firebase';
+import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,19 +26,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { loginAction } from '@/lib/actions';
 import { Logo } from '@/components/logo';
 import { mockUsers } from '@/lib/data';
+import type { User } from '@/lib/types';
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? 'Logging In...' : 'Log In'}
-      <KeyRound className="ml-2" />
-    </Button>
-  );
-}
+const USERS_STORAGE_KEY = 'neu-liblog-users';
+
+const loginSchema = z.object({
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
+});
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -61,92 +57,140 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
-  const [result, setResult] = useState<any>({});
+  
+  const [users, setUsers] = useState<User[]>([]);
+  const [isClient, setIsClient] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const [result, setResult] = useState<{ status?: 'success' | 'needs-signup' | 'error'; role?: 'admin' | 'user'; email?: string; message?: string, errors?: { email?: string[] } }>({});
   const [showAdminChoice, setShowAdminChoice] = useState(false);
 
   useEffect(() => {
-    if (result?.status === 'success' && result.role === 'admin' && result.email) {
+    setIsClient(true);
+    try {
+      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+      if (storedUsers) {
+        setUsers(JSON.parse(storedUsers));
+      } else {
+        setUsers(mockUsers);
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mockUsers));
+      }
+    } catch (error) {
+      console.error("Failed to access localStorage:", error);
+      setUsers(mockUsers);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!result.status) return;
+
+    if (result.status === 'success' && result.role === 'admin' && result.email) {
       toast({
         title: 'Admin login successful',
         description: 'Please choose how to proceed.',
       });
       setShowAdminChoice(true);
-    } else if (result?.status === 'success' && result.role === 'user' && result.email) {
+    } else if (result.status === 'success' && result.role === 'user' && result.email) {
       toast({
         title: 'Login successful!',
         description: 'Please provide your visit details.',
       });
       router.push(`/welcome?email=${encodeURIComponent(result.email)}`);
-    } else if (result?.status === 'needs-signup' && result.email) {
+    } else if (result.status === 'needs-signup' && result.email) {
         toast({
             title: 'Account Not Found',
             description: 'Please complete the sign up form to create your account.',
         });
         router.push(`/signup?email=${encodeURIComponent(result.email)}`);
-    } else if (result?.status === 'error' || result?.message) {
+    } else if (result.status === 'error' || result.message) {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
         description: result.message,
       });
     }
+
+    setIsPending(false);
   }, [result, router, toast]);
 
-  const handleGoogleSignIn = async () => {
-    if (!auth) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Authentication service not ready.',
+  const processLogin = (email: string) => {
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    
+    const isAdminDomain = email.endsWith('@neu.edu.ph');
+    const isUserDomain = email.endsWith('@neu.edu');
+
+    if (!isAdminDomain && !isUserDomain) {
+      return { status: 'error', message: 'Invalid institutional email.' } as const;
+    }
+
+    if (user) {
+      return { status: 'success', role: user.role, email: user.email } as const;
+    } else {
+      return { status: 'needs-signup', email } as const;
+    }
+  }
+
+  const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsPending(true);
+    setResult({});
+
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+
+    const validatedFields = loginSchema.safeParse({ email });
+
+    if (!validatedFields.success) {
+      setResult({
+        status: 'error',
+        errors: validatedFields.error.flatten().fieldErrors,
+        message: validatedFields.error.flatten().fieldErrors.email?.[0] ?? 'Invalid email format.',
       });
       return;
     }
+
+    setResult(processLogin(validatedFields.data.email));
+  }
+
+  const handleGoogleSignIn = async () => {
+    if (!auth) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Authentication service not ready.' });
+      return;
+    }
+    
+    setIsPending(true);
     const provider = new GoogleAuthProvider();
     try {
       const popupResult = await signInWithPopup(auth, provider);
       const user = popupResult.user;
       if (user && user.email) {
-        const isAdminDomain = user.email.endsWith('@neu.edu.ph');
-        const isUserDomain = user.email.endsWith('@neu.edu');
-
-        if (!isAdminDomain && !isUserDomain) {
-          await auth.signOut();
-          setResult({ status: 'error', message: 'Please use a valid institutional email (@neu.edu or @neu.edu.ph).' });
-          return;
-        }
-        
-        const existingUser = mockUsers.find(u => u.email.toLowerCase() === user.email!.toLowerCase());
-
-        if (existingUser) {
-            setResult({ status: 'success', role: existingUser.role, email: existingUser.email });
-        } else {
-            setResult({ status: 'needs-signup', email: user.email });
-        }
-
+        setResult(processLogin(user.email));
       } else {
         throw new Error('No user or email found after Google sign-in.');
       }
     } catch (error: any) {
-      setResult({
-        status: 'error',
-        message:
-          error.message ||
-          'An unexpected error occurred during Google sign-in.',
-      });
+      setResult({ status: 'error', message: error.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled.' : (error.message || 'An unexpected error occurred during Google sign-in.') });
+    } finally {
+        setIsPending(false);
     }
   };
 
   const handleQrScan = () => {
-    // Simulate a successful QR scan for a regular user
+    const randomUser = users.find(u => u.role === 'user') || mockUsers.find(u => u.role === 'user');
+    if (!randomUser) {
+        toast({ variant: 'destructive', title: 'Error', description: 'No user available for QR scan simulation.' });
+        return;
+    }
     toast({
       title: 'QR Scan Successful!',
       description: 'Please provide your visit details.',
     });
-    router.push('/welcome');
+    router.push(`/welcome?email=${encodeURIComponent(randomUser.email)}`);
   };
 
   const handleAdminChoice = (destination: 'dashboard' | 'visit') => {
@@ -154,7 +198,7 @@ export default function LoginPage() {
     if (destination === 'dashboard') {
       router.push('/admin/dashboard');
     } else {
-      router.push(`/welcome?email=${encodeURIComponent(result.email)}`);
+      router.push(`/welcome?email=${encodeURIComponent(result.email!)}`);
     }
   };
 
@@ -181,9 +225,7 @@ export default function LoginPage() {
               </TabsList>
               <TabsContent value="email">
                 <form
-                  action={async (formData) =>
-                    setResult(await loginAction({}, formData))
-                  }
+                  onSubmit={handleEmailSubmit}
                   className="space-y-4 pt-4"
                 >
                   <div className="space-y-2">
@@ -194,6 +236,7 @@ export default function LoginPage() {
                       type="email"
                       placeholder="juan.delacruz@neu.edu"
                       required
+                      disabled={isPending}
                     />
                     {result?.errors?.email && (
                       <p className="text-sm text-destructive">
@@ -201,7 +244,10 @@ export default function LoginPage() {
                       </p>
                     )}
                   </div>
-                  <SubmitButton />
+                  <Button type="submit" className="w-full" disabled={isPending}>
+                    {isPending ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
+                    {isPending ? 'Logging In...' : 'Log In'}
+                  </Button>
                 </form>
               </TabsContent>
               <TabsContent value="qr">
@@ -212,7 +258,7 @@ export default function LoginPage() {
                   <p className="text-sm text-muted-foreground">
                     Position your QR code within the frame
                   </p>
-                  <Button onClick={handleQrScan} className="w-full">
+                  <Button onClick={handleQrScan} className="w-full" disabled={!isClient || isPending}>
                     Simulate QR Scan
                   </Button>
                 </div>
@@ -232,8 +278,9 @@ export default function LoginPage() {
               variant="outline"
               className="w-full gap-2"
               onClick={handleGoogleSignIn}
+              disabled={isPending}
             >
-              <GoogleIcon className="h-5 w-5" />
+               <GoogleIcon className="h-5 w-5" />
               Google
             </Button>
           </CardContent>
