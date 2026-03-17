@@ -2,9 +2,9 @@ import type { User, VisitLog, College } from './types';
 import { colleges, visitReasons } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
-const firstNames = ['John', 'Jane', 'Peter', 'Mary', 'Admin'];
-const lastNames = ['Doe', 'Smith', 'Jones', 'Williams', 'User'];
-const userEmails = ['john.doe@neu.edu', 'jane.smith@neu.edu', 'peter.jones@neu.edu', 'mary.williams@neu.edu', 'admin@neu.edu.ph'];
+const firstNames = ['John', 'Jane', 'Peter', 'Mary', 'Jeremiah'];
+const lastNames = ['Doe', 'Smith', 'Jones', 'Williams', 'Esperanza'];
+const userEmails = ['john.doe@neu.edu', 'jane.smith@neu.edu', 'peter.jones@neu.edu', 'mary.williams@neu.edu', 'jcesperanza@neu.edu.ph'];
 
 const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
 
