@@ -12,6 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { User, College } from '@/lib/types';
 import { mockUsers } from '@/lib/data';
 
+const USERS_STORAGE_KEY = 'neu-liblog-users';
+
 function WelcomeComponent() {
   const [isFormOpen, setIsFormOpen] = useState(true);
   const { toast } = useToast();
@@ -19,12 +21,30 @@ function WelcomeComponent() {
   const router = useRouter();
   
   const email = searchParams.get('email');
-  const isUserLoading = false;
-  
-  // Try to find an existing user from the mock data
-  let user: User | undefined = email ? mockUsers.find(u => u.email === email) : undefined;
+  const [users, setUsers] = useState<User[]>([]);
+  const [isUserLoading, setIsUserLoading] = useState(true);
 
-  // If user not found in mock data, check for new user details from signup page query params
+  useEffect(() => {
+    try {
+      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+      if (storedUsers) {
+        setUsers(JSON.parse(storedUsers));
+      } else {
+        // Fallback to mock data if nothing in storage
+        setUsers(mockUsers);
+      }
+    } catch (error) {
+      console.error("Failed to read from localStorage:", error);
+      setUsers(mockUsers); // Fallback to mock data on error
+    } finally {
+      setIsUserLoading(false);
+    }
+  }, []);
+  
+  // Try to find an existing user from the users list (loaded from localStorage)
+  let user: User | undefined = email ? users.find(u => u.email === email) : undefined;
+
+  // If user not found in user list, check for new user details from signup page query params
   if (!user && email) {
     const firstName = searchParams.get('firstName');
     const lastName = searchParams.get('lastName');
