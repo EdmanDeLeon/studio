@@ -64,14 +64,14 @@ export default function LoginPage() {
   const auth = useAuth();
   
   const [users, setUsers] = useState<User[]>([]);
-  const [isClient, setIsClient] = useState(false);
+  const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
 
   const [result, setResult] = useState<{ status?: 'success' | 'needs-signup' | 'error'; role?: 'admin' | 'user'; email?: string; message?: string, errors?: { email?: string[] } }>({});
   const [showAdminChoice, setShowAdminChoice] = useState(false);
 
   useEffect(() => {
-    setIsClient(true);
+    setIsUsersLoading(true);
     try {
       const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
       if (storedUsers) {
@@ -83,6 +83,8 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Failed to access localStorage:", error);
       setUsers(mockUsers);
+    } finally {
+      setIsUsersLoading(false);
     }
   }, []);
 
@@ -236,7 +238,7 @@ export default function LoginPage() {
                       type="email"
                       placeholder="juan.delacruz@neu.edu"
                       required
-                      disabled={isPending}
+                      disabled={isPending || isUsersLoading}
                     />
                     {result?.errors?.email && (
                       <p className="text-sm text-destructive">
@@ -244,9 +246,9 @@ export default function LoginPage() {
                       </p>
                     )}
                   </div>
-                  <Button type="submit" className="w-full" disabled={isPending}>
-                    {isPending ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
-                    {isPending ? 'Logging In...' : 'Log In'}
+                  <Button type="submit" className="w-full" disabled={isPending || isUsersLoading}>
+                    {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
+                    {isPending ? 'Logging In...' : (isUsersLoading ? 'Loading...' : 'Log In')}
                   </Button>
                 </form>
               </TabsContent>
@@ -258,8 +260,8 @@ export default function LoginPage() {
                   <p className="text-sm text-muted-foreground">
                     Position your QR code within the frame
                   </p>
-                  <Button onClick={handleQrScan} className="w-full" disabled={!isClient || isPending}>
-                    Simulate QR Scan
+                  <Button onClick={handleQrScan} className="w-full" disabled={isUsersLoading || isPending}>
+                    {isUsersLoading ? 'Loading...' : 'Simulate QR Scan'}
                   </Button>
                 </div>
               </TabsContent>
@@ -278,9 +280,9 @@ export default function LoginPage() {
               variant="outline"
               className="w-full gap-2"
               onClick={handleGoogleSignIn}
-              disabled={isPending}
+              disabled={isPending || isUsersLoading}
             >
-               <GoogleIcon className="h-5 w-5" />
+              {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
               Google
             </Button>
           </CardContent>
