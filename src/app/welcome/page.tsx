@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { VisitDetailsForm } from '@/components/visit-details-form';
 import { Logo } from '@/components/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { User } from '@/lib/types';
+import type { User, College } from '@/lib/types';
 import { mockUsers } from '@/lib/data';
 
 function WelcomeComponent() {
@@ -21,7 +21,31 @@ function WelcomeComponent() {
   const email = searchParams.get('email');
   const isUserLoading = false;
   
-  const user = email ? mockUsers.find(u => u.email === email) : undefined;
+  // Try to find an existing user from the mock data
+  let user: User | undefined = email ? mockUsers.find(u => u.email === email) : undefined;
+
+  // If user not found in mock data, check for new user details from signup page query params
+  if (!user && email) {
+    const firstName = searchParams.get('firstName');
+    const lastName = searchParams.get('lastName');
+    const college = searchParams.get('college') as College;
+    
+    // If all details for a new user are present, create a temporary user object
+    if (firstName && lastName && college) {
+      user = {
+        id: `new-user-${Date.now()}`,
+        qrCodeIdentifier: 'N/A', // Not applicable for new users in this flow
+        firstName,
+        lastName,
+        email,
+        college,
+        role: 'user', // New signups are always 'user'
+        isBlocked: false,
+        avatarUrl: `https://picsum.photos/seed/${email}/40/40`, // Generate a consistent placeholder avatar
+      };
+    }
+  }
+
 
   const handleFormSubmit = () => {
     setIsFormOpen(false);

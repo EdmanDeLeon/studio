@@ -28,6 +28,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from '@/lib/actions';
 import { Logo } from '@/components/logo';
+import { mockUsers } from '@/lib/data';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -68,19 +69,25 @@ export default function LoginPage() {
   const [showAdminChoice, setShowAdminChoice] = useState(false);
 
   useEffect(() => {
-    if (result?.role === 'admin' && result.email) {
+    if (result?.status === 'success' && result.role === 'admin' && result.email) {
       toast({
         title: 'Admin login successful',
         description: 'Please choose how to proceed.',
       });
       setShowAdminChoice(true);
-    } else if (result?.role === 'user' && result.email) {
+    } else if (result?.status === 'success' && result.role === 'user' && result.email) {
       toast({
         title: 'Login successful!',
         description: 'Please provide your visit details.',
       });
       router.push(`/welcome?email=${encodeURIComponent(result.email)}`);
-    } else if (result?.message) {
+    } else if (result?.status === 'needs-signup' && result.email) {
+        toast({
+            title: 'Account Not Found',
+            description: 'Please complete the sign up form to create your account.',
+        });
+        router.push(`/signup?email=${encodeURIComponent(result.email)}`);
+    } else if (result?.status === 'error' || result?.message) {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
@@ -103,22 +110,29 @@ export default function LoginPage() {
       const popupResult = await signInWithPopup(auth, provider);
       const user = popupResult.user;
       if (user && user.email) {
-        if (user.email.endsWith('@neu.edu.ph')) {
-          setResult({ role: 'admin', email: user.email });
-        } else if (user.email.endsWith('@neu.edu')) {
-          setResult({ role: 'user', email: user.email });
-        } else {
+        const isAdminDomain = user.email.endsWith('@neu.edu.ph');
+        const isUserDomain = user.email.endsWith('@neu.edu');
+
+        if (!isAdminDomain && !isUserDomain) {
           await auth.signOut();
-          setResult({
-            message:
-              'Please use a valid institutional email (@neu.edu or @neu.edu.ph).',
-          });
+          setResult({ status: 'error', message: 'Please use a valid institutional email (@neu.edu or @neu.edu.ph).' });
+          return;
         }
+        
+        const existingUser = mockUsers.find(u => u.email.toLowerCase() === user.email!.toLowerCase());
+
+        if (existingUser) {
+            setResult({ status: 'success', role: existingUser.role, email: existingUser.email });
+        } else {
+            setResult({ status: 'needs-signup', email: user.email });
+        }
+
       } else {
         throw new Error('No user or email found after Google sign-in.');
       }
     } catch (error: any) {
       setResult({
+        status: 'error',
         message:
           error.message ||
           'An unexpected error occurred during Google sign-in.',
