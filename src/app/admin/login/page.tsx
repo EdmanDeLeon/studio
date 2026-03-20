@@ -1,12 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { useAuth, useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useGoogleAuth } from '@/hooks/use-google-auth';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -17,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -43,73 +38,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const auth = useAuth();
-  const firestore = useFirestore();
-  const { user: firebaseUser, isUserLoading } = useUser();
-  
-  const [isSigningIn, setIsSigningIn] = useState(false);
-
-  // This effect runs when the firebase user's state changes.
-  useEffect(() => {
-    if (isUserLoading || !firebaseUser) {
-      // If still loading or no user, do nothing.
-      // The AdminLayout will handle redirects if a user is already logged in.
-      return;
-    }
-
-    const checkAdminStatus = async () => {
-        setIsSigningIn(true);
-        const userDocRef = doc(firestore, 'userProfiles', firebaseUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists() && userDocSnap.data()?.role === 'admin') {
-            router.push('/admin/dashboard');
-        } else {
-            toast({
-                variant: 'destructive',
-                title: 'Access Denied',
-                description: 'This account does not have administrator privileges.',
-            });
-            await auth?.signOut();
-            setIsSigningIn(false);
-        }
-    };
-    checkAdminStatus();
-    
-  }, [firebaseUser, isUserLoading, firestore, router, toast, auth]);
-
-
-  const handleGoogleSignIn = async () => {
-    if (!auth) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Authentication service not ready.' });
-      return;
-    }
-    
-    setIsSigningIn(true);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-        prompt: 'select_account'
-    });
-
-    try {
-      await signInWithPopup(auth, provider);
-      // After successful popup, the `useEffect` above will handle verification and redirection.
-    } catch (error: any) {
-      // Don't show an error toast if the user closes the popup.
-      if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-        toast({
-            variant: 'destructive',
-            title: 'Google Sign-In Failed',
-            description: error.message || 'An unexpected error occurred.',
-        });
-      }
-       setIsSigningIn(false); // Reset processing state if sign-in fails or is cancelled.
-    }
-  };
-  
-  const isLoading = isSigningIn || isUserLoading;
+  const { signInWithGoogle, isSigningIn } = useGoogleAuth('admin');
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -127,11 +56,11 @@ export default function AdminLoginPage() {
                 <Button
                 variant="outline"
                 className="w-full gap-2"
-                onClick={handleGoogleSignIn}
-                disabled={isLoading}
+                onClick={signInWithGoogle}
+                disabled={isSigningIn}
                 >
-                {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-                {isSigningIn ? 'Verifying...' : (isUserLoading ? 'Loading...' : 'Log In with Google')}
+                {isSigningIn ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                {isSigningIn ? 'Verifying...' : 'Log In with Google'}
                 </Button>
             </div>
           </CardContent>

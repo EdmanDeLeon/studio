@@ -2,14 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
-import { GoogleAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { useAuth, useUser, useFirestore } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
+import { useGoogleAuth } from '@/hooks/use-google-auth';
 
 const loginFormSchema = z.object({
     email: z.string().email('Please enter a valid email address.'),
@@ -56,95 +53,21 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const auth = useAuth();
-  const firestore = useFirestore();
-  const { user: firebaseUser, isUserLoading } = useUser();
-  
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const { signInWithGoogle, isSigningIn } = useGoogleAuth();
 
   const form = useForm<LoginFormInputs>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: { email: '' },
   });
 
-  const processLogin = useCallback(async (user: import('firebase/auth').User) => {
-    setIsSigningIn(true);
-    const { uid, email } = user;
-    
-    if (!email) {
-      toast({ variant: 'destructive', title: 'Login Failed', description: 'Could not retrieve email from provider.' });
-      setIsSigningIn(false);
-      return;
-    }
-    
-    const userDocRef = doc(firestore, 'userProfiles', uid);
-    const userDocSnap = await getDoc(userDocRef);
-
-    if (userDocSnap.exists()) {
-      const userData = userDocSnap.data();
-      if (userData.role === 'admin') {
-        toast({
-          title: 'Admin Account',
-          description: 'Please use the separate administrator login page.',
-        });
-        await auth?.signOut();
-      } else {
-        // User exists and is not an admin, proceed to welcome page
-        router.push(`/welcome?uid=${uid}`);
-      }
-    } else {
-      // User does not exist, redirect to signup
-      router.push(`/signup?uid=${uid}&email=${encodeURIComponent(email)}`);
-    }
-
-    setIsSigningIn(false);
-  }, [firestore, router, toast, auth]);
-
-  useEffect(() => {
-    // This effect runs only when a new firebaseUser is detected.
-    if (firebaseUser && !isSigningIn) {
-      processLogin(firebaseUser);
-    }
-  }, [firebaseUser, processLogin, isSigningIn]);
-
-
-  const handleGoogleSignIn = async () => {
-    if (!auth) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Authentication service not ready.' });
-      return;
-    }
-    
-    setIsSigningIn(true);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    try {
-      const result = await signInWithPopup(auth, provider);
-      // The useEffect hook will now handle the logic with the new user object.
-    } catch (error: any) {
-      if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-        toast({
-            variant: 'destructive',
-            title: 'Google Sign-In Failed',
-            description: error.message || 'An unexpected error occurred.',
-        });
-      }
-      setIsSigningIn(false);
-    }
-  };
-
   const onEmailSubmit = (data: LoginFormInputs) => {
-    // This is a mock sign-in for email. In a real app, this would involve
-    // sending a magic link or password authentication.
-    // For this app, we'll just redirect to signup with email.
+    // This is a mock sign-in for email.
     toast({
         title: 'Check your email',
         description: 'For this demo, we will redirect you to the signup page. In a real app, you would receive a login link.',
     });
     router.push(`/signup?email=${encodeURIComponent(data.email)}`);
   };
-
-  const isLoading = isSigningIn || isUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -167,14 +90,14 @@ export default function LoginPage() {
                         <FormItem>
                         <FormLabel className="sr-only">Email</FormLabel>
                         <FormControl>
-                            <Input placeholder="your.email@neu.edu" {...field} disabled={isLoading} />
+                            <Input placeholder="your.email@neu.edu.ph" {...field} disabled={isSigningIn} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading && form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    <Button type="submit" className="w-full" disabled={isSigningIn}>
+                        {isSigningIn && form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Continue with Email
                     </Button>
                 </form>
@@ -193,10 +116,10 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full gap-2"
-                onClick={handleGoogleSignIn}
-                disabled={isLoading}
+                onClick={signInWithGoogle}
+                disabled={isSigningIn}
               >
-                {isLoading && !form.formState.isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                {isSigningIn && !form.formState.isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
                 Google
               </Button>
             </div>
