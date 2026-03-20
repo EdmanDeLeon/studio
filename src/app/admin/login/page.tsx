@@ -1,11 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, FormEvent } from 'react';
-import { KeyRound, Mail, LayoutDashboard, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
-import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,18 +14,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { mockUsers } from '@/lib/data';
 import type { User } from '@/lib/types';
 
 const USERS_STORAGE_KEY = 'neu-liblog-users';
-
-const loginSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-});
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -60,6 +53,7 @@ export default function AdminLoginPage() {
   const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
   const [isProcessingLogin, setIsProcessingLogin] = useState(false);
 
+  // Load user data from localStorage
   useEffect(() => {
     setIsAppUsersLoading(true);
     try {
@@ -77,13 +71,13 @@ export default function AdminLoginPage() {
       setIsAppUsersLoading(false);
     }
   }, []);
-
+  
+  // This effect runs after a Google Sign-In attempt to verify admin role and redirect.
   useEffect(() => {
-    if (isFirebaseUserLoading || isAppUsersLoading || isProcessingLogin || !firebaseUser || !firebaseUser.email) {
+    // Only proceed if we are actively trying to log in and have a user object.
+    if (!isProcessingLogin || isFirebaseUserLoading || isAppUsersLoading || !firebaseUser || !firebaseUser.email) {
       return;
     }
-    
-    setIsProcessingLogin(true);
 
     const email = firebaseUser.email;
     const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -100,51 +94,10 @@ export default function AdminLoginPage() {
         title: 'Login Failed',
         description: 'This account does not have admin privileges.',
       });
-      auth.signOut();
-      setIsProcessingLogin(false);
+      auth?.signOut();
+      setIsProcessingLogin(false); // Reset state after failed login
     }
-  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth, isProcessingLogin]);
-
-  const handleManualLogin = (email: string) => {
-    const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-    if (appUser?.role === 'admin') {
-      toast({
-        title: 'Admin login successful',
-        description: 'Redirecting to dashboard...',
-      });
-      router.push('/admin/dashboard');
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: 'This account does not have admin privileges or does not exist.',
-      });
-      setIsProcessingLogin(false);
-    }
-  };
-
-  const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsProcessingLogin(true);
-
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get('email') as string;
-
-    const validatedFields = loginSchema.safeParse({ email });
-
-    if (!validatedFields.success) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: validatedFields.error.flatten().fieldErrors.email?.[0] ?? 'Invalid email format.',
-      });
-      setIsProcessingLogin(false);
-      return;
-    }
-    
-    handleManualLogin(validatedFields.data.email);
-  }
+  }, [firebaseUser, isProcessingLogin, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth]);
 
   const handleGoogleSignIn = async () => {
     if (!auth) {
@@ -152,14 +105,18 @@ export default function AdminLoginPage() {
       return;
     }
     
+    // Set processing state to true to trigger the useEffect after sign-in.
     setIsProcessingLogin(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
         prompt: 'select_account'
     });
+
     try {
       await signInWithPopup(auth, provider);
+      // After successful popup, the `useEffect` will handle role verification and redirection.
     } catch (error: any) {
+      // Don't show an error toast if the user closes the popup.
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         toast({
             variant: 'destructive',
@@ -167,10 +124,11 @@ export default function AdminLoginPage() {
             description: error.message || 'An unexpected error occurred.',
         });
       }
-      setIsProcessingLogin(false);
+      setIsProcessingLogin(false); // Reset processing state if sign-in fails or is cancelled.
     }
   };
-
+  
+  // The main loading state considers all async operations.
   const isLoading = isProcessingLogin || isAppUsersLoading || isFirebaseUserLoading;
 
   return (
@@ -181,49 +139,21 @@ export default function AdminLoginPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Administrator Log In</CardTitle>
             <CardDescription>
-              Please use your administrative account to proceed.
+              Please use your administrative Google account to proceed.
             </CardDescription>
           </CardHeader>
           <CardContent>
-             <form
-                onSubmit={handleEmailSubmit}
-                className="space-y-4 pt-4"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="email">Institutional Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="admin@neu.edu.ph"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
-                  {isProcessingLogin ? 'Logging In...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In')}
+            <div className="pt-4">
+                <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+                >
+                {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                {isProcessingLogin ? 'Verifying...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In with Google')}
                 </Button>
-              </form>
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Or log in with
-                </span>
-              </div>
             </div>
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={handleGoogleSignIn}
-              disabled={isLoading}
-            >
-              {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-              Google
-            </Button>
           </CardContent>
         </Card>
       </div>
