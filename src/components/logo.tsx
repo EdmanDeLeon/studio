@@ -5,7 +5,7 @@ export function Logo({ className, large = false }: { className?: string; large?:
   return (
     <div className={cn("flex items-center", large ? "gap-4" : "gap-3", className)}>
       <Image 
-        src="https://storage.googleapis.com/oss-codegen-images/f709199d-16a7-47b8-b4b3-c157f12e4f04.png"
+        src="https://storage.googleapis.com/oss-codegen-images/019b8823-a2b7-4cea-8514-1e582e052445.png"
         alt="New Era University Logo"
         width={large ? 56 : 32}
         height={large ? 56 : 32}
