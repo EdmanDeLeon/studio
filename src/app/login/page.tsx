@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
-import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -17,12 +19,20 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { mockUsers } from '@/lib/data';
 import type { User } from '@/lib/types';
 
 const USERS_STORAGE_KEY = 'neu-liblog-users';
+
+const loginFormSchema = z.object({
+    email: z.string().email('Please enter a valid email address.'),
+});
+type LoginFormInputs = z.infer<typeof loginFormSchema>;
+
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -56,6 +66,11 @@ export default function LoginPage() {
   const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
   const [isProcessingLogin, setIsProcessingLogin] = useState(false);
 
+  const form = useForm<LoginFormInputs>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: { email: '' },
+  });
+
   useEffect(() => {
     setIsAppUsersLoading(true);
     try {
@@ -74,21 +89,15 @@ export default function LoginPage() {
     }
   }, []);
 
-  useEffect(() => {
-    // This effect handles the logic after a user has successfully signed in via Firebase
-    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser || !firebaseUser.email) {
-      return;
-    }
-    
-    // This state prevents running the logic multiple times during a single sign-in flow
-    if (isProcessingLogin) return; 
+  const processLogin = (email: string) => {
+    if (!email) return;
+
     setIsProcessingLogin(true);
-
-    const email = firebaseUser.email;
-    const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-    const isAdminDomain = email.endsWith('@neu.edu.ph');
-    const isUserDomain = email.endsWith('@neu.edu');
+    const normalizedEmail = email.toLowerCase();
+    const appUser = appUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+    
+    const isAdminDomain = normalizedEmail.endsWith('@neu.edu.ph');
+    const isUserDomain = normalizedEmail.endsWith('@neu.edu');
 
     if (!isAdminDomain && !isUserDomain) {
       toast({
@@ -96,13 +105,12 @@ export default function LoginPage() {
         title: 'Login Failed',
         description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
       });
-      auth?.signOut(); // Sign out the user with the invalid email
+      auth?.signOut();
       setIsProcessingLogin(false);
       return;
     }
-
+    
     if (appUser) {
-      // User exists in our app's database
       if (appUser.role === 'admin') {
         toast({
           variant: 'destructive',
@@ -110,24 +118,32 @@ export default function LoginPage() {
           description: 'Please use the separate administrator login page.',
         });
         auth?.signOut();
-        setIsProcessingLogin(false);
       } else {
         toast({
           title: 'Login successful!',
           description: 'Please provide your visit details.',
         });
-        router.push(`/welcome?email=${encodeURIComponent(email)}`);
+        router.push(`/welcome?email=${encodeURIComponent(normalizedEmail)}`);
       }
     } else {
-      // User does not exist, redirect to signup
       toast({
-          title: 'Account Not Found',
-          description: 'Please complete the sign up form to create your account.',
+        title: 'Account Not Found',
+        description: 'Please complete the sign up form to create your account.',
       });
-      router.push(`/signup?email=${encodeURIComponent(email)}`);
+      router.push(`/signup?email=${encodeURIComponent(normalizedEmail)}`);
     }
 
-  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth, isProcessingLogin]);
+    // Reset processing state after a delay to allow for navigation
+    setTimeout(() => setIsProcessingLogin(false), 1000);
+  };
+
+  useEffect(() => {
+    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser?.email || isProcessingLogin) {
+      return;
+    }
+    processLogin(firebaseUser.email);
+  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading]);
+
 
   const handleGoogleSignIn = async () => {
     if (!auth) {
@@ -137,14 +153,11 @@ export default function LoginPage() {
     
     setIsProcessingLogin(true);
     const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-        prompt: 'select_account'
-    });
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
       await signInWithPopup(auth, provider);
       // The useEffect hook will handle the logic after successful login.
     } catch (error: any) {
-      // Don't show toast for user-cancelled popups
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         toast({
             variant: 'destructive',
@@ -152,8 +165,12 @@ export default function LoginPage() {
             description: error.message || 'An unexpected error occurred.',
         });
       }
-      setIsProcessingLogin(false); // Reset processing state only if sign-in fails
+      setIsProcessingLogin(false);
     }
+  };
+
+  const onEmailSubmit = (data: LoginFormInputs) => {
+    processLogin(data.email);
   };
 
   const isLoading = isProcessingLogin || isAppUsersLoading || isFirebaseUserLoading;
@@ -166,19 +183,50 @@ export default function LoginPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Library Log In</CardTitle>
             <CardDescription>
-              Sign in using your institutional Google account
+              Sign in using your institutional account
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="pt-4">
+          <CardContent className="space-y-4">
+             <Form {...form}>
+                <form onSubmit={form.handleSubmit(onEmailSubmit)} className="space-y-4">
+                    <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel className="sr-only">Email</FormLabel>
+                        <FormControl>
+                            <Input placeholder="your.email@neu.edu" {...field} disabled={isLoading} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                        {isLoading && form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Continue with Email
+                    </Button>
+                </form>
+            </Form>
+             <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                    </span>
+                </div>
+            </div>
+            <div>
               <Button
                 variant="outline"
                 className="w-full gap-2"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
               >
-                {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-                {isLoading ? 'Logging In...' : 'Log In with Google'}
+                {isLoading && !form.formState.isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                Google
               </Button>
             </div>
           </CardContent>
