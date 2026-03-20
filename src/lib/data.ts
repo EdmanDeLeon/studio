@@ -30,7 +30,8 @@ export const mockAdmin: User = mockUsers.find(u => u.role === 'admin')!;
 
 export const mockVisitLogs: VisitLog[] = [];
 
-const now = new Date();
+// Use a fixed date to prevent hydration mismatches between server and client rendering.
+const now = new Date('2024-05-24T10:00:00Z');
 for (let i = 0; i < 200; i++) {
   const user = mockUsers[i % mockUsers.length];
   // Generate deterministic timestamps, spreading them over the last ~25 days
