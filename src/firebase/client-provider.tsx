@@ -14,9 +14,6 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     return initializeFirebase();
   }, []); // Empty dependency array ensures this runs only once on mount
 
-  // The onAuthStateChanged listener that performed an automatic anonymous sign-in has been removed.
-  // The FirebaseProvider is now solely responsible for listening to and distributing auth state.
-
   return (
     <FirebaseProvider
       firebaseApp={firebaseServices.firebaseApp}

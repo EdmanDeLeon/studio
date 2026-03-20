@@ -1,9 +1,143 @@
+/**
+ * This ruleset enforces a security model based on user ownership and global administrative roles for a library visit tracking system.
+ *
+ * Core Philosophy:
+ * The primary security goal is to ensure that users can only access and manage their own data, while granting administrators global oversight and management capabilities. The rules default to denying access, only permitting actions that are explicitly allowed.
+ *
+ * Data Structure:
+ * - /userProfiles/{userId}: Each user has a root profile document. The document ID matches their authentication UID.
+ * - /userProfiles/{userId}/libraryVisits/{visitId}: A user's library visit history is stored in a nested subcollection.
+ * - /colleges/{collegeId} & /visitReasons/{reasonId}: These are top-level collections for system-wide lookup data (e.g., lists of colleges, reasons for visits).
+ * - /roles_admin/{userId}: A special collection where the existence of a document grants a user system-wide administrative privileges.
+ *
+ * Key Security Decisions:
+ * - Admin Role Management: A user is considered an administrator if a document with their UID exists in the `/roles_admin` collection. This allows for highly performant and secure role checks using `exists()`.
+ * - User Privacy: Users are strictly prohibited from listing or viewing other users' profiles or visit histories.
+ * - Lookup Data: Collections like `colleges` and `visitReasons` are readable by any authenticated user but can only be modified by administrators.
+ * - Ownership Integrity: Rules enforce that when a user creates a subcollection document (like a library visit), the document's internal `userId` field must match the user's UID, ensuring data integrity.
+ *
+ * Denormalization for Authorization:
+ * To ensure performant and secure rules, especially for administrator queries that scan across all users' data (Collection Group Queries), the `userId` is denormalized (copied) into each `libraryVisits` document. This allows a rule to verify ownership directly from the document itself without needing a slow and costly `get()` call to its parent `userProfile` document.
+ *
+ * Structural Segregation:
+ * The separation of user-specific data (`/userProfiles`) from global lookup data (`/colleges`) and administrative roles (`/roles_admin`) into distinct top-level collections provides a clear and secure structure. This prevents unintended data access and simplifies rule logic.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // These rules are insecure and are for development purposes only.
-    match /{document=**} {
-      allow read, write: if true;
+
+    // =====================================================================
+    // Helper Functions
+    // =====================================================================
+
+    /**
+     * Checks if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the authenticated user's UID matches the document ID in the path.
+     * This is the primary function for establishing document ownership.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if a document for the user exists in the admin collection.
+     * This provides a performant check for global administrative privileges.
+     */
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    /**
+     * Verifies that a document exists before an update or delete operation.
+     * This is a critical check to ensure rules are not bypassed on non-existent paths.
+     */
+    function isExistingDoc() {
+      return resource != null;
+    }
+
+    // =====================================================================
+    // Collection Rules
+    // =====================================================================
+
+    /**
+     * @description Manages user profiles. Users can create, read, and update their own profile. Admins can read and modify any profile.
+     * @path /userProfiles/{userId}
+     * @allow (create) A new user (uid: 'user123') creating their own profile at `/userProfiles/user123`.
+     * @deny (list) A regular user trying to list all documents in the `userProfiles` collection.
+     * @principle Enforces document ownership for personal data and provides admin oversight.
+     */
+    match /userProfiles/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if (isOwner(userId) || isAdmin()) && isExistingDoc() && request.resource.data.id == resource.data.id;
+      allow delete: if isAdmin() && isExistingDoc();
+
+      /**
+       * @description Manages library visit records, nested under a user. Users can manage their own visits. Admins have full access for reporting.
+       * @path /userProfiles/{userId}/libraryVisits/{visitId}
+       * @allow (create) A user (uid: 'user123') creating a new library visit at `/userProfiles/user123/libraryVisits/visitABC`.
+       * @deny (update) A user (uid: 'user123') trying to update a visit for another user at `/userProfiles/user456/libraryVisits/visitXYZ`.
+       * @principle Enforces ownership on nested subcollections and validates denormalized data (`userId`) for relational integrity and performant queries.
+       */
+      match /libraryVisits/{visitId} {
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) && isExistingDoc() && request.resource.data.userId == resource.data.userId;
+        allow delete: if (isOwner(userId) || isAdmin()) && isExistingDoc();
+      }
+    }
+
+    /**
+     * @description Manages college lookup data. Readable by all authenticated users, but writable only by administrators.
+     * @path /colleges/{collegeId}
+     * @allow (list) Any signed-in user listing all college documents.
+     * @deny (create) A regular, non-admin user trying to create a new college document.
+     * @principle Secures lookup data by making it public-read for authenticated users and write-restricted to admins.
+     */
+    match /colleges/{collegeId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && isExistingDoc();
+      allow delete: if isAdmin() && isExistingDoc();
+    }
+
+    /**
+     * @description Manages visit reason lookup data. Readable by all authenticated users, writable only by admins.
+     * @path /visitReasons/{reasonId}
+     * @allow (get) Any authenticated user reading a specific visit reason document.
+     * @deny (update) A regular, non-admin user trying to modify an existing visit reason.
+     * @principle Secures lookup data by making it public-read for authenticated users and write-restricted to admins.
+     */
+    match /visitReasons/{reasonId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && isExistingDoc();
+      allow delete: if isAdmin() && isExistingDoc();
+    }
+
+    /**
+     * @description Manages administrator roles. The existence of a document here grants admin rights. This collection is opaque to non-admins.
+     * @path /roles_admin/{userId}
+     * @allow (create) An existing admin creating a document at `/roles_admin/newUserAdmin` to grant them admin rights.
+     * @deny (get) Any non-admin user trying to read, list, or write to this collection to check for admin status.
+     * @principle Secures the admin role management system itself, preventing unauthorized privilege escalation.
+     */
+    match /roles_admin/{userId} {
+      allow get: if false;
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin() && isExistingDoc();
+      allow delete: if isAdmin() && isExistingDoc();
     }
   }
 }
