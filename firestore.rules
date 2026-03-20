@@ -8,19 +8,15 @@
  * - /userProfiles/{userId}: Each user has a root profile document. The document ID matches their authentication UID.
  * - /userProfiles/{userId}/libraryVisits/{visitId}: A user's library visit history is stored in a nested subcollection.
  * - /colleges/{collegeId} & /visitReasons/{reasonId}: These are top-level collections for system-wide lookup data (e.g., lists of colleges, reasons for visits).
- * - /roles_admin/{userId}: A special collection where the existence of a document grants a user system-wide administrative privileges.
  *
  * Key Security Decisions:
- * - Admin Role Management: A user is considered an administrator if a document with their UID exists in the `/roles_admin` collection. This allows for highly performant and secure role checks using `exists()`.
+ * - Admin Role Management: A user is considered an administrator if their userProfile document has role == 'admin'.
  * - User Privacy: Users are strictly prohibited from listing or viewing other users' profiles or visit histories.
- * - Lookup Data: Collections like `colleges` and `visitReasons` are readable by any authenticated user but can only be modified by administrators.
+ * - Role Escalation Prevention: A crucial rule prevents non-admin users from changing their own 'role' field, blocking a common privilege escalation vector.
  * - Ownership Integrity: Rules enforce that when a user creates a subcollection document (like a library visit), the document's internal `userId` field must match the user's UID, ensuring data integrity.
  *
  * Denormalization for Authorization:
  * To ensure performant and secure rules, especially for administrator queries that scan across all users' data (Collection Group Queries), the `userId` is denormalized (copied) into each `libraryVisits` document. This allows a rule to verify ownership directly from the document itself without needing a slow and costly `get()` call to its parent `userProfile` document.
- *
- * Structural Segregation:
- * The separation of user-specific data (`/userProfiles`) from global lookup data (`/colleges`) and administrative roles (`/roles_admin`) into distinct top-level collections provides a clear and secure structure. This prevents unintended data access and simplifies rule logic.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -46,15 +42,13 @@ service cloud.firestore {
     }
 
     /**
-     * Checks if a document for the user exists in the admin collection.
+     * Checks if the current user has an 'admin' role in their profile.
      * This provides a performant check for global administrative privileges.
      */
     function isAdmin() {
-      // In a real app, you might check for a custom claim or a document in a specific collection.
-      // For this example, we'll check a 'role' field in the user's profile.
-      // This requires a get() call, which has performance and cost implications.
-      // A more scalable approach is using custom claims or a separate admin collection.
-      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
+      // A user is an admin if their profile document has the role 'admin'.
+      // This requires a get() call, which has cost implications but is necessary for role-based access.
+      return isSignedIn() && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
     }
 
     /**
@@ -67,6 +61,7 @@ service cloud.firestore {
     
     // Collection Group for all library visits
     match /{path=**}/libraryVisits/{visitId} {
+      // Admins can list all visits across all users for reporting purposes.
       allow list: if isAdmin();
     }
 
@@ -75,14 +70,32 @@ service cloud.firestore {
     // =====================================================================
 
     /**
-     * @description Manages user profiles. Users can create their own profile, and read/update it. Admins can read and modify any profile.
+     * @description Manages user profiles. Users can create, read, and update their own profile. Admins have full access.
      * @path /userProfiles/{userId}
      */
     match /userProfiles/{userId} {
+      // Users can read their own profile, Admins can read any profile.
       allow get: if isOwner(userId) || isAdmin();
+      // Only admins can list all users.
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if (isOwner(userId) || isAdmin()) && isExistingDoc() && request.resource.data.id == resource.data.id;
+      
+      // A new user can create their own profile document.
+      // - The document ID must match their authentication UID.
+      // - The 'role' must be explicitly set to 'user' to prevent self-assignment of admin roles.
+      allow create: if isOwner(userId) && 
+                      request.resource.data.id == userId &&
+                      request.resource.data.role == 'user';
+                      
+      // Update access is granted if:
+      // 1. The document already exists.
+      // 2. The user ID in the document cannot be changed.
+      // 3. EITHER the request is from an admin, OR it's from the document owner AND they are not changing their own role.
+      // This prevents users from escalating their own privileges.
+      allow update: if isExistingDoc() &&
+                      request.resource.data.id == resource.data.id &&
+                      (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+
+      // Only admins can delete user profiles.
       allow delete: if isAdmin() && isExistingDoc();
 
       /**
@@ -92,7 +105,9 @@ service cloud.firestore {
       match /libraryVisits/{visitId} {
         allow get: if isOwner(userId) || isAdmin();
         allow list: if isOwner(userId) || isAdmin();
+        // The userId within the visit log must match the creator's UID.
         allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        // The userId within the visit log cannot be changed.
         allow update: if (isOwner(userId) || isAdmin()) && isExistingDoc() && request.resource.data.userId == resource.data.userId;
         allow delete: if (isOwner(userId) || isAdmin()) && isExistingDoc();
       }
