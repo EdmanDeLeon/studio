@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Bell, BookOpenCheck, Clock, Home, LayoutDashboard, LogOut, Settings, Users } from 'lucide-react';
+import { Bell, Clock, LayoutDashboard, LogOut, Users } from 'lucide-react';
 
 import {
   SidebarProvider,
@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { mockAdmin } from '@/lib/data';
+import { Logo } from '@/components/logo';
 
 const menuItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -54,10 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
-          <div className="flex items-center gap-2">
-            <BookOpenCheck className="size-7 text-primary" />
-            <span className="text-lg font-semibold">NEU LibLog</span>
-          </div>
+          <Logo />
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>

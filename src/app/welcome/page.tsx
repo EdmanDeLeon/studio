@@ -148,7 +148,7 @@ function WelcomeComponent() {
       
       {!isFormOpen && (
         <div className="flex flex-col items-center gap-6 animate-in fade-in-50 duration-500">
-          <Logo />
+          <Logo large />
           <div className="space-y-2">
             <h2 className="text-4xl font-bold tracking-tight text-primary">Thank You!</h2>
             <p className="text-muted-foreground max-w-md">
