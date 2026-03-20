@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent } from 'react';
-import { KeyRound, Mail, QrCode, LayoutDashboard, LogIn, Loader2 } from 'lucide-react';
+import { KeyRound, Mail, LayoutDashboard, LogIn, Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { z } from 'zod';
@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -182,19 +181,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQrScan = () => {
-    const randomUser = users.find(u => u.role === 'user') || mockUsers.find(u => u.role === 'user');
-    if (!randomUser) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No user available for QR scan simulation.' });
-        return;
-    }
-    toast({
-      title: 'QR Scan Successful!',
-      description: 'Please provide your visit details.',
-    });
-    router.push(`/welcome?email=${encodeURIComponent(randomUser.email)}`);
-  };
-
   const handleAdminChoice = (destination: 'dashboard' | 'visit') => {
     setShowAdminChoice(false);
     if (destination === 'dashboard') {
@@ -212,60 +198,35 @@ export default function LoginPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Library Log In</CardTitle>
             <CardDescription>
-              Enter using your institutional account or QR code
+              Enter using your institutional account
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="email">
-                  <Mail className="mr-2" /> Email
-                </TabsTrigger>
-                <TabsTrigger value="qr">
-                  <QrCode className="mr-2" /> QR Code ID
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="email">
-                <form
-                  onSubmit={handleEmailSubmit}
-                  className="space-y-4 pt-4"
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Institutional Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="juan.delacruz@neu.edu"
-                      required
-                      disabled={isPending || isUsersLoading}
-                    />
-                    {result?.errors?.email && (
-                      <p className="text-sm text-destructive">
-                        {result.errors.email[0]}
-                      </p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isPending || isUsersLoading}>
-                    {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
-                    {isPending ? 'Logging In...' : (isUsersLoading ? 'Loading...' : 'Log In')}
-                  </Button>
-                </form>
-              </TabsContent>
-              <TabsContent value="qr">
-                <div className="flex flex-col items-center justify-center space-y-4 pt-4">
-                  <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center">
-                    <QrCode className="w-24 h-24 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Position your QR code within the frame
-                  </p>
-                  <Button onClick={handleQrScan} className="w-full" disabled={isUsersLoading || isPending}>
-                    {isUsersLoading ? 'Loading...' : 'Simulate QR Scan'}
-                  </Button>
+             <form
+                onSubmit={handleEmailSubmit}
+                className="space-y-4 pt-4"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="email">Institutional Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="juan.delacruz@neu.edu"
+                    required
+                    disabled={isPending || isUsersLoading}
+                  />
+                  {result?.errors?.email && (
+                    <p className="text-sm text-destructive">
+                      {result.errors.email[0]}
+                    </p>
+                  )}
                 </div>
-              </TabsContent>
-            </Tabs>
+                <Button type="submit" className="w-full" disabled={isPending || isUsersLoading}>
+                  {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
+                  {isPending ? 'Logging In...' : (isUsersLoading ? 'Loading...' : 'Log In')}
+                </Button>
+              </form>
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />

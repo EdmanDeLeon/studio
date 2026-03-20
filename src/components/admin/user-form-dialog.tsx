@@ -94,22 +94,6 @@ export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }
     if (isEditMode && user) {
         submittedUser = { ...user, ...data };
     } else {
-        const currentYear = new Date().getFullYear();
-        let maxIdNum = 0;
-        if (users && users.length > 0) {
-          for (const u of users) {
-            if (u.qrCodeIdentifier && u.qrCodeIdentifier.includes('-')) {
-              const numPart = parseInt(u.qrCodeIdentifier.split('-')[1], 10);
-              if (!isNaN(numPart) && numPart > maxIdNum) {
-                maxIdNum = numPart;
-              }
-            }
-          }
-        }
-        const nextIdNum = maxIdNum + 1;
-        const newQrCodeIdentifier = `${currentYear}-${String(nextIdNum).padStart(6, '0')}`;
-        
-        // simple hash for a unique-ish ID for mock data
         const newId = `mock-${Date.now()}-${Math.random()}`;
         const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
         const avatarIndex = (newId.charCodeAt(5) || 0) % avatarPlaceholders.length;
@@ -118,7 +102,6 @@ export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }
         submittedUser = {
             ...data,
             id: newId,
-            qrCodeIdentifier: newQrCodeIdentifier,
             isBlocked: false,
             avatarUrl: randomAvatar,
         };
@@ -187,23 +170,7 @@ export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }
                 </FormItem>
               )}
             />
-            {isEditMode && user ? (
-                <FormItem>
-                    <FormLabel>Student ID (QR/Tap)</FormLabel>
-                    <FormControl>
-                        <Input value={user.qrCodeIdentifier} disabled />
-                    </FormControl>
-                    <FormDescription>Student ID cannot be changed.</FormDescription>
-                </FormItem>
-            ) : (
-              <FormItem>
-                <FormLabel>Student ID (QR/Tap)</FormLabel>
-                <FormControl>
-                    <Input value="Will be auto-generated" disabled />
-                </FormControl>
-                <FormDescription>The Student ID is generated automatically for new users.</FormDescription>
-              </FormItem>
-            )}
+            
             <FormField
               control={form.control}
               name="college"

@@ -15,10 +15,6 @@
           "description": "Institutional email address of the user, used for login.",
           "format": "email"
         },
-        "qrCodeIdentifier": {
-          "type": "string",
-          "description": "Unique identifier scanned from a QR code for quick 'Tap ID' login. This typically corresponds to an institutional ID found on a student/faculty ID card."
-        },
         "firstName": {
           "type": "string",
           "description": "First name of the user."
@@ -43,7 +39,6 @@
       "required": [
         "id",
         "email",
-        "qrCodeIdentifier",
         "firstName",
         "lastName",
         "role",

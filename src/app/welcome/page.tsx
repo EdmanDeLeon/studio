@@ -54,7 +54,6 @@ function WelcomeComponent() {
     if (firstName && lastName && college) {
       user = {
         id: `new-user-${Date.now()}`,
-        qrCodeIdentifier: 'N/A', // Not applicable for new users in this flow
         firstName,
         lastName,
         email,
