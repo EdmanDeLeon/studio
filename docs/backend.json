@@ -15,10 +15,6 @@
           "description": "The institutional email address of the user, primarily used for login and identification.",
           "format": "email"
         },
-        "qrCodeId": {
-          "type": "string",
-          "description": "A unique identifier obtained from the user's institutional QR Code ID, used for the 'Tap ID' login feature."
-        },
         "role": {
           "type": "string",
           "description": "The assigned role of the user within the system, either 'Administrator' or 'User' (student/faculty)."
@@ -134,8 +130,6 @@
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous",
       "google.com"
     ]
   },

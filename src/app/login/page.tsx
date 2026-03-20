@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent } from 'react';
-import { KeyRound, Mail, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
 import { z } from 'zod';
@@ -17,18 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { mockUsers } from '@/lib/data';
 import type { User } from '@/lib/types';
 
 const USERS_STORAGE_KEY = 'neu-liblog-users';
-
-const loginSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-});
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -82,11 +76,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     // This effect handles the logic after a user has successfully signed in via Firebase
-    if (isFirebaseUserLoading || isAppUsersLoading || isProcessingLogin || !firebaseUser || !firebaseUser.email) {
+    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser || !firebaseUser.email) {
       return;
     }
     
-    // Prevent this effect from running multiple times for the same login
+    // This state prevents running the logic multiple times during a single sign-in flow
+    if (isProcessingLogin) return; 
     setIsProcessingLogin(true);
 
     const email = firebaseUser.email;
@@ -101,7 +96,7 @@ export default function LoginPage() {
         title: 'Login Failed',
         description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
       });
-      auth.signOut(); // Sign out the user with the invalid email
+      auth?.signOut(); // Sign out the user with the invalid email
       setIsProcessingLogin(false);
       return;
     }
@@ -114,7 +109,7 @@ export default function LoginPage() {
           title: 'Admin Account',
           description: 'Please use the separate administrator login page.',
         });
-        auth.signOut();
+        auth?.signOut();
         setIsProcessingLogin(false);
       } else {
         toast({
@@ -133,54 +128,6 @@ export default function LoginPage() {
     }
 
   }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth, isProcessingLogin]);
-
-
-  const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsProcessingLogin(true);
-
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get('email') as string;
-
-    const validatedFields = loginSchema.safeParse({ email });
-
-    if (!validatedFields.success) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: validatedFields.error.flatten().fieldErrors.email?.[0] ?? 'Invalid email format.',
-      });
-      setIsProcessingLogin(false);
-      return;
-    }
-    
-    // For email form, we just check our local list and redirect. This doesn't create a real Firebase Auth session.
-    const appUser = appUsers.find(u => u.email.toLowerCase() === validatedFields.data.email.toLowerCase());
-    
-    const isAdminDomain = validatedFields.data.email.endsWith('@neu.edu.ph');
-    const isUserDomain = validatedFields.data.email.endsWith('@neu.edu');
-
-    if (!isAdminDomain && !isUserDomain) {
-      toast({ variant: 'destructive', title: 'Login Failed', description: 'Invalid institutional email.' });
-      setIsProcessingLogin(false);
-      return;
-    }
-
-    if (appUser) {
-      if (appUser.role === 'admin') {
-        toast({
-          variant: 'destructive',
-          title: 'Admin Account',
-          description: 'Please use the separate administrator login page.',
-        });
-        setIsProcessingLogin(false);
-      } else {
-        router.push(`/welcome?email=${encodeURIComponent(appUser.email)}`);
-      }
-    } else {
-      router.push(`/signup?email=${encodeURIComponent(validatedFields.data.email)}`);
-    }
-  }
 
   const handleGoogleSignIn = async () => {
     if (!auth) {
@@ -219,49 +166,21 @@ export default function LoginPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Library Log In</CardTitle>
             <CardDescription>
-              Enter using your institutional account
+              Sign in using your institutional Google account
             </CardDescription>
           </CardHeader>
           <CardContent>
-             <form
-                onSubmit={handleEmailSubmit}
-                className="space-y-4 pt-4"
+            <div className="pt-4">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
               >
-                <div className="space-y-2">
-                  <Label htmlFor="email">Institutional Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="juan.delacruz@neu.edu"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
-                  {isProcessingLogin ? 'Logging In...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In')}
-                </Button>
-              </form>
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Or log in with
-                </span>
-              </div>
+                {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                {isLoading ? 'Logging In...' : 'Log In with Google'}
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={handleGoogleSignIn}
-              disabled={isLoading}
-            >
-              {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-              Google
-            </Button>
           </CardContent>
           <CardFooter className="flex justify-center text-sm text-muted-foreground pt-6">
              <p>
