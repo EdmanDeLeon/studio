@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent } from 'react';
-import { KeyRound, Mail, Loader2 } from 'lucide-react';
+import { KeyRound, Mail, LayoutDashboard, Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
 import { z } from 'zod';
@@ -13,7 +12,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -52,7 +50,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
@@ -81,59 +79,50 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    // This effect handles the logic after a user has successfully signed in via Firebase
     if (isFirebaseUserLoading || isAppUsersLoading || isProcessingLogin || !firebaseUser || !firebaseUser.email) {
       return;
     }
     
-    // Prevent this effect from running multiple times for the same login
     setIsProcessingLogin(true);
 
     const email = firebaseUser.email;
     const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
 
-    const isAdminDomain = email.endsWith('@neu.edu.ph');
-    const isUserDomain = email.endsWith('@neu.edu');
-
-    if (!isAdminDomain && !isUserDomain) {
+    if (appUser?.role === 'admin') {
+      toast({
+        title: 'Admin login successful',
+        description: 'Redirecting to dashboard...',
+      });
+      router.push('/admin/dashboard');
+    } else {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
+        description: 'This account does not have admin privileges.',
       });
-      auth.signOut(); // Sign out the user with the invalid email
+      auth.signOut();
       setIsProcessingLogin(false);
-      return;
     }
-
-    if (appUser) {
-      // User exists in our app's database
-      if (appUser.role === 'admin') {
-        toast({
-          variant: 'destructive',
-          title: 'Admin Account',
-          description: 'Please use the separate administrator login page.',
-        });
-        auth.signOut();
-        setIsProcessingLogin(false);
-      } else {
-        toast({
-          title: 'Login successful!',
-          description: 'Please provide your visit details.',
-        });
-        router.push(`/welcome?email=${encodeURIComponent(email)}`);
-      }
-    } else {
-      // User does not exist, redirect to signup
-      toast({
-          title: 'Account Not Found',
-          description: 'Please complete the sign up form to create your account.',
-      });
-      router.push(`/signup?email=${encodeURIComponent(email)}`);
-    }
-
   }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth, isProcessingLogin]);
 
+  const handleManualLogin = (email: string) => {
+    const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+    if (appUser?.role === 'admin') {
+      toast({
+        title: 'Admin login successful',
+        description: 'Redirecting to dashboard...',
+      });
+      router.push('/admin/dashboard');
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'This account does not have admin privileges or does not exist.',
+      });
+      setIsProcessingLogin(false);
+    }
+  };
 
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -154,32 +143,7 @@ export default function LoginPage() {
       return;
     }
     
-    // For email form, we just check our local list and redirect. This doesn't create a real Firebase Auth session.
-    const appUser = appUsers.find(u => u.email.toLowerCase() === validatedFields.data.email.toLowerCase());
-    
-    const isAdminDomain = validatedFields.data.email.endsWith('@neu.edu.ph');
-    const isUserDomain = validatedFields.data.email.endsWith('@neu.edu');
-
-    if (!isAdminDomain && !isUserDomain) {
-      toast({ variant: 'destructive', title: 'Login Failed', description: 'Invalid institutional email.' });
-      setIsProcessingLogin(false);
-      return;
-    }
-
-    if (appUser) {
-      if (appUser.role === 'admin') {
-        toast({
-          variant: 'destructive',
-          title: 'Admin Account',
-          description: 'Please use the separate administrator login page.',
-        });
-        setIsProcessingLogin(false);
-      } else {
-        router.push(`/welcome?email=${encodeURIComponent(appUser.email)}`);
-      }
-    } else {
-      router.push(`/signup?email=${encodeURIComponent(validatedFields.data.email)}`);
-    }
+    handleManualLogin(validatedFields.data.email);
   }
 
   const handleGoogleSignIn = async () => {
@@ -195,9 +159,7 @@ export default function LoginPage() {
     });
     try {
       await signInWithPopup(auth, provider);
-      // The useEffect hook will handle the logic after successful login.
     } catch (error: any) {
-      // Don't show toast for user-cancelled popups
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         toast({
             variant: 'destructive',
@@ -205,7 +167,7 @@ export default function LoginPage() {
             description: error.message || 'An unexpected error occurred.',
         });
       }
-      setIsProcessingLogin(false); // Reset processing state only if sign-in fails
+      setIsProcessingLogin(false);
     }
   };
 
@@ -217,9 +179,9 @@ export default function LoginPage() {
         <Logo className="justify-center mb-8" large />
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Library Log In</CardTitle>
+            <CardTitle className="text-2xl">Administrator Log In</CardTitle>
             <CardDescription>
-              Enter using your institutional account
+              Please use your administrative account to proceed.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -233,7 +195,7 @@ export default function LoginPage() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="juan.delacruz@neu.edu"
+                    placeholder="admin@neu.edu.ph"
                     required
                     disabled={isLoading}
                   />
@@ -263,14 +225,6 @@ export default function LoginPage() {
               Google
             </Button>
           </CardContent>
-          <CardFooter className="flex justify-center text-sm text-muted-foreground pt-6">
-             <p>
-              Are you an administrator?{' '}
-              <Link href="/admin/login" className="underline text-primary hover:text-primary/80">
-                Log in here
-              </Link>
-            </p>
-          </CardFooter>
         </Card>
       </div>
     </main>
