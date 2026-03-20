@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -18,10 +19,6 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
-import { mockUsers } from '@/lib/data';
-import type { User } from '@/lib/types';
-
-const USERS_STORAGE_KEY = 'neu-liblog-users';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 48 48" {...props}>
@@ -49,60 +46,39 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
-  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
+  const firestore = useFirestore();
+  const { user: firebaseUser, isUserLoading } = useUser();
   
-  const [appUsers, setAppUsers] = useState<User[]>([]);
-  const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
-  // Load user data from localStorage
+  // This effect runs when the firebase user's state changes.
   useEffect(() => {
-    setIsAppUsersLoading(true);
-    try {
-      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-      if (storedUsers) {
-        setAppUsers(JSON.parse(storedUsers));
-      } else {
-        setAppUsers(mockUsers);
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mockUsers));
-      }
-    } catch (error) {
-      console.error("Failed to access localStorage:", error);
-      setAppUsers(mockUsers);
-    } finally {
-      setIsAppUsersLoading(false);
-    }
-  }, []);
-  
-  // This effect runs whenever the firebase user's state changes.
-  useEffect(() => {
-    // If Firebase or app user data is still loading, wait.
-    if (isFirebaseUserLoading || isAppUsersLoading) {
+    if (isUserLoading || !firebaseUser) {
+      // If still loading or no user, do nothing.
+      // The AdminLayout will handle redirects if a user is already logged in.
       return;
     }
 
-    // If there is a logged-in user, verify their role.
-    if (firebaseUser?.email) {
-      const email = firebaseUser.email.toLowerCase();
-      const appUser = appUsers.find(u => u.email.toLowerCase() === email);
+    const checkAdminStatus = async () => {
+        setIsSigningIn(true);
+        const userDocRef = doc(firestore, 'userProfiles', firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-      if (appUser?.role === 'admin') {
-        // Logged-in user is an admin, redirect them to the dashboard.
-        router.push('/admin/dashboard');
-      } else {
-        // The user is authenticated with Firebase but is not an admin in our app.
-        // Show an error and sign them out.
-        toast({
-          variant: 'destructive',
-          title: 'Access Denied',
-          description: 'This account does not have admin privileges.',
-        });
-        auth?.signOut();
-        setIsSigningIn(false);
-      }
-    }
-    // If there's no firebaseUser, we do nothing and simply let the login page render.
-  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth]);
+        if (userDocSnap.exists() && userDocSnap.data()?.role === 'admin') {
+            router.push('/admin/dashboard');
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Access Denied',
+                description: 'This account does not have administrator privileges.',
+            });
+            await auth?.signOut();
+            setIsSigningIn(false);
+        }
+    };
+    checkAdminStatus();
+    
+  }, [firebaseUser, isUserLoading, firestore, router, toast, auth]);
 
 
   const handleGoogleSignIn = async () => {
@@ -133,8 +109,7 @@ export default function AdminLoginPage() {
     }
   };
   
-  // The main loading state considers all async operations.
-  const isLoading = isSigningIn || isAppUsersLoading || isFirebaseUserLoading;
+  const isLoading = isSigningIn || isUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -156,7 +131,7 @@ export default function AdminLoginPage() {
                 disabled={isLoading}
                 >
                 {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-                {isSigningIn ? 'Verifying...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In with Google')}
+                {isSigningIn ? 'Verifying...' : (isUserLoading ? 'Loading...' : 'Log In with Google')}
                 </Button>
             </div>
           </CardContent>

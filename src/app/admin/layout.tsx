@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Bell, Clock, LayoutDashboard, LogOut, Users } from 'lucide-react';
-import { useUser, useAuth } from '@/firebase';
+import { useUser, useAuth, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
-import { mockUsers } from '@/lib/data';
 
 import {
   SidebarProvider,
@@ -52,46 +52,49 @@ function RealTimeClock() {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user: firebaseUser, isUserLoading } = useUser();
+  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
   const auth = useAuth();
-  const [appUser, setAppUser] = useState<User | null>(null);
-  const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
+  const firestore = useFirestore();
+
+  const userProfileRef = useMemoFirebase(
+      () => (firestore && firebaseUser ? doc(firestore, 'userProfiles', firebaseUser.uid) : null),
+      [firestore, firebaseUser]
+  );
+  const { data: appUser, isLoading: isAppUserLoading } = useDoc<User>(userProfileRef);
+
+  const isLoading = isFirebaseUserLoading || isAppUserLoading;
 
   useEffect(() => {
-    if (isUserLoading) return;
-
-    const storedUsersString = localStorage.getItem('neu-liblog-users');
-    const allUsers: User[] = storedUsersString ? JSON.parse(storedUsersString) : mockUsers;
-
-    if (!firebaseUser) {
-      // If not logged into Firebase and not on the login page, redirect to login
+    // If not loading and no Firebase user, they must log in.
+    if (!isLoading && !firebaseUser) {
       if (pathname !== '/admin/login') {
         router.replace('/admin/login');
       }
-      setIsAppUsersLoading(false);
       return;
     }
 
-    // If there is a Firebase user, check their role in our app's user list
-    const currentAppUser = allUsers.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
-
-    if (currentAppUser?.role === 'admin') {
-      setAppUser(currentAppUser);
-      // If a logged-in admin lands on the login page, redirect them to the dashboard
-      if (pathname === '/admin/login') {
-        router.replace('/admin/dashboard');
-      }
-    } else {
-      // If the user is not an admin or not in our list, sign them out and redirect
-      auth?.signOut();
-      setAppUser(null);
-      if (pathname !== '/admin/login') {
-        router.replace('/admin/login');
-      }
+    // If there is a Firebase user but still loading app user profile, wait.
+    if (isLoading) {
+        return;
     }
-    setIsAppUsersLoading(false);
+    
+    // Once everything is loaded:
+    if (firebaseUser) {
+        if (appUser?.role === 'admin') {
+            // Logged-in admin is on the login page, redirect to dashboard.
+            if (pathname === '/admin/login') {
+                router.replace('/admin/dashboard');
+            }
+        } else {
+            // User is not an admin, or profile doesn't exist. Sign out and redirect.
+            auth?.signOut();
+            if (pathname !== '/admin/login') {
+                router.replace('/admin/login');
+            }
+        }
+    }
 
-  }, [firebaseUser, isUserLoading, pathname, router, auth]);
+  }, [firebaseUser, appUser, isLoading, pathname, router, auth]);
 
 
   // If we are on the login path, just render the children (the login page itself).
@@ -102,7 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // For any other admin route, ensure user is authenticated and verified as an admin.
   // Show a loading state until verification is complete.
-  if (isUserLoading || isAppUsersLoading || !appUser) {
+  if (isLoading || !appUser) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <p className="text-muted-foreground">Authenticating...</p>

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { MoreHorizontal, Search, UserPlus, Trash2, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { collection, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 
 import {
   DropdownMenu,
@@ -38,9 +39,7 @@ import { Input } from '@/components/ui/input';
 import type { User } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { UserFormDialog } from '@/components/admin/user-form-dialog';
-import { mockUsers } from '@/lib/data';
-
-const USERS_STORAGE_KEY = 'neu-liblog-users';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 
 export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,41 +47,16 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
-  const [users, setUsers] = useState<User[]>([]);
   
   const { toast } = useToast();
   const router = useRouter();
+  const firestore = useFirestore();
 
-  // Load users from localStorage on initial render
-  useEffect(() => {
-    try {
-      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-      if (storedUsers) {
-        setUsers(JSON.parse(storedUsers));
-      } else {
-        // If nothing is in storage, initialize with mock data
-        setUsers(mockUsers);
-      }
-    } catch (error) {
-      console.error("Failed to read from localStorage:", error);
-      setUsers(mockUsers); // Fallback to mock data
-    }
-    setIsLoading(false);
-  }, []);
-
-  // Save users to localStorage whenever the list changes
-  useEffect(() => {
-    try {
-        if (users.length > 0) { // Avoid saving the initial empty state
-            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-        }
-    } catch (error) {
-        console.error("Failed to write to localStorage:", error);
-    }
-  }, [users]);
+  const usersQuery = useMemoFirebase(() => collection(firestore, 'userProfiles'), [firestore]);
+  const { data: users, isLoading } = useCollection<User>(usersQuery);
 
   const filteredUsers = useMemo(() => {
+    if (!users) return [];
     const sortedUsers = [...users].sort((a, b) => a.lastName.localeCompare(b.lastName));
     if (!searchTerm) return sortedUsers;
     return sortedUsers.filter(user =>
@@ -102,12 +76,9 @@ export default function UserManagementPage() {
     setIsFormOpen(true);
   }
   
-  const handleFormSubmit = (submittedUser: User) => {
-    if (selectedUser) { // Edit mode
-        setUsers(prevUsers => prevUsers.map(u => u.id === submittedUser.id ? submittedUser : u));
-    } else { // Add mode
-        setUsers(prevUsers => [...prevUsers, submittedUser]);
-    }
+  const handleFormSubmit = () => {
+    // This is now handled within UserFormDialog which writes to Firestore.
+    // The useCollection hook will automatically update the UI.
   };
 
   const handleViewHistory = (userId: string) => {
@@ -119,28 +90,43 @@ export default function UserManagementPage() {
     setIsDeleteAlertOpen(true);
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!userToDelete) return;
 
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userToDelete.id));
-
-    toast({
-      title: "User Deleted",
-      description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
-    });
+    try {
+      await deleteDoc(doc(firestore, 'userProfiles', userToDelete.id));
+      toast({
+        title: "User Deleted",
+        description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
+      });
+    } catch (error) {
+       toast({
+        variant: "destructive",
+        title: "Error Deleting User",
+        description: "An unexpected error occurred while deleting the user.",
+      });
+    }
 
     setIsDeleteAlertOpen(false);
     setUserToDelete(undefined);
   };
 
-  const toggleUserStatus = (userId: string, currentBlockedStatus: boolean) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, isBlocked: !currentBlockedStatus } : u));
-    
-    const user = users.find(u => u.id === userId);
-    if (user) {
+  const toggleUserStatus = async (userId: string, currentBlockedStatus: boolean) => {
+    const userRef = doc(firestore, 'userProfiles', userId);
+    try {
+        await updateDoc(userRef, { isBlocked: !currentBlockedStatus });
+        const user = users?.find(u => u.id === userId);
+        if (user) {
+            toast({
+                title: `User ${!currentBlockedStatus ? 'Blocked' : 'Unblocked'}`,
+                description: `${user.firstName} ${user.lastName}'s status has been updated.`,
+            });
+        }
+    } catch (error) {
         toast({
-            title: `User ${!currentBlockedStatus ? 'Blocked' : 'Unblocked'}`,
-            description: `${user.firstName} ${user.lastName}'s status has been updated.`,
+            variant: "destructive",
+            title: "Error Updating Status",
+            description: "Could not update the user's status.",
         });
     }
   };
@@ -262,7 +248,6 @@ export default function UserManagementPage() {
     </div>
     <UserFormDialog 
         user={selectedUser} 
-        users={users} 
         open={isFormOpen} 
         onOpenChange={setIsFormOpen}
         onFormSubmit={handleFormSubmit}

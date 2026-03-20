@@ -7,8 +7,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { useAuth, useUser } from '@/firebase';
+import { GoogleAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { useAuth, useUser, useFirestore } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -23,10 +24,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
-import { mockUsers } from '@/lib/data';
-import type { User } from '@/lib/types';
-
-const USERS_STORAGE_KEY = 'neu-liblog-users';
 
 const loginFormSchema = z.object({
     email: z.string().email('Please enter a valid email address.'),
@@ -60,10 +57,9 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
-  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
+  const firestore = useFirestore();
+  const { user: firebaseUser, isUserLoading } = useUser();
   
-  const [appUsers, setAppUsers] = useState<User[]>([]);
-  const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const form = useForm<LoginFormInputs>({
@@ -71,79 +67,45 @@ export default function LoginPage() {
     defaultValues: { email: '' },
   });
 
-  useEffect(() => {
-    setIsAppUsersLoading(true);
-    try {
-      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-      if (storedUsers) {
-        setAppUsers(JSON.parse(storedUsers));
-      } else {
-        setAppUsers(mockUsers);
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mockUsers));
-      }
-    } catch (error) {
-      console.error("Failed to access localStorage:", error);
-      setAppUsers(mockUsers);
-    } finally {
-      setIsAppUsersLoading(false);
-    }
-  }, []);
-
-  const processLogin = useCallback((email: string) => {
-    if (!email) return;
-
-    const normalizedEmail = email.toLowerCase();
-    const appUser = appUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+  const processLogin = useCallback(async (user: import('firebase/auth').User) => {
+    setIsSigningIn(true);
+    const { uid, email } = user;
     
-    const isAdminDomain = normalizedEmail.endsWith('@neu.edu.ph');
-    const isUserDomain = normalizedEmail.endsWith('@neu.edu');
-
-    if (!isAdminDomain && !isUserDomain) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
-      });
-      auth?.signOut();
+    if (!email) {
+      toast({ variant: 'destructive', title: 'Login Failed', description: 'Could not retrieve email from provider.' });
       setIsSigningIn(false);
       return;
     }
     
-    if (appUser) {
-      if (appUser.role === 'admin') {
+    const userDocRef = doc(firestore, 'userProfiles', uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (userDocSnap.exists()) {
+      const userData = userDocSnap.data();
+      if (userData.role === 'admin') {
         toast({
-          variant: 'destructive',
           title: 'Admin Account',
           description: 'Please use the separate administrator login page.',
         });
-        auth?.signOut();
+        await auth?.signOut();
       } else {
-        toast({
-          title: 'Login successful!',
-          description: 'Please provide your visit details.',
-        });
-        router.push(`/welcome?email=${encodeURIComponent(normalizedEmail)}`);
+        // User exists and is not an admin, proceed to welcome page
+        router.push(`/welcome?uid=${uid}`);
       }
     } else {
-      toast({
-        title: 'Account Not Found',
-        description: 'Please complete the sign up form to create your account.',
-      });
-      router.push(`/signup?email=${encodeURIComponent(normalizedEmail)}`);
+      // User does not exist, redirect to signup
+      router.push(`/signup?uid=${uid}&email=${encodeURIComponent(email)}`);
     }
 
-    // Reset processing state after a delay to allow for navigation
-    setTimeout(() => setIsSigningIn(false), 1000);
-  }, [appUsers, router, toast, auth]);
+    setIsSigningIn(false);
+  }, [firestore, router, toast, auth]);
 
   useEffect(() => {
-    // Wait until all data is loaded and there is a user object.
-    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser?.email) {
-      return;
+    // This effect runs only when a new firebaseUser is detected.
+    if (firebaseUser && !isSigningIn) {
+      processLogin(firebaseUser);
     }
-    // If a user is authenticated, process their login.
-    processLogin(firebaseUser.email);
-  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, processLogin]);
+  }, [firebaseUser, processLogin, isSigningIn]);
 
 
   const handleGoogleSignIn = async () => {
@@ -155,9 +117,10 @@ export default function LoginPage() {
     setIsSigningIn(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      await signInWithPopup(auth, provider);
-      // The useEffect hook will handle the logic after successful login.
+      const result = await signInWithPopup(auth, provider);
+      // The useEffect hook will now handle the logic with the new user object.
     } catch (error: any) {
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
         toast({
@@ -171,11 +134,17 @@ export default function LoginPage() {
   };
 
   const onEmailSubmit = (data: LoginFormInputs) => {
-    setIsSigningIn(true);
-    processLogin(data.email);
+    // This is a mock sign-in for email. In a real app, this would involve
+    // sending a magic link or password authentication.
+    // For this app, we'll just redirect to signup with email.
+    toast({
+        title: 'Check your email',
+        description: 'For this demo, we will redirect you to the signup page. In a real app, you would receive a login link.',
+    });
+    router.push(`/signup?email=${encodeURIComponent(data.email)}`);
   };
 
-  const isLoading = isSigningIn || isAppUsersLoading || isFirebaseUserLoading;
+  const isLoading = isSigningIn || isUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">

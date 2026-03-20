@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { doc, setDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { User } from "@/lib/types";
 import { colleges } from "@/lib/types";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { useFirestore } from "@/firebase";
 
 const userFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
@@ -50,14 +52,14 @@ type UserFormData = z.infer<typeof userFormSchema>;
 
 type UserFormDialogProps = {
   user?: User;
-  users: User[];
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  onFormSubmit: (user: User) => void;
+  onFormSubmit: () => void;
 };
 
-export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }: UserFormDialogProps) {
+export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserFormDialogProps) {
   const { toast } = useToast();
+  const firestore = useFirestore();
   const [isPending, setIsPending] = useState(false);
   const isEditMode = !!user;
 
@@ -89,33 +91,47 @@ export function UserFormDialog({ user, users, open, onOpenChange, onFormSubmit }
   const onSubmit = async (data: UserFormData) => {
     setIsPending(true);
     
-    let submittedUser: User;
-
-    if (isEditMode && user) {
-        submittedUser = { ...user, ...data };
-    } else {
-        const newId = `mock-${Date.now()}-${Math.random()}`;
-        const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
-        const avatarIndex = (newId.charCodeAt(5) || 0) % avatarPlaceholders.length;
-        const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
-
-        submittedUser = {
-            ...data,
-            id: newId,
-            isBlocked: false,
-            avatarUrl: randomAvatar,
-        };
+    try {
+        if (isEditMode && user) {
+            // Update existing user
+            const userRef = doc(firestore, "userProfiles", user.id);
+            await setDoc(userRef, data, { merge: true });
+        } else {
+            // Create new user. In a real app, this should only be done for users
+            // authenticated via an admin-created process, not generic sign-up.
+            // For now, we'll create a new ID, but this isn't secure for production.
+            const newId = `manual-${Date.now()}`;
+            const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
+            const avatarIndex = (newId.charCodeAt(0) || 0) % avatarPlaceholders.length;
+            const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
+            
+            const newUser: User = {
+                ...data,
+                id: newId,
+                isBlocked: false,
+                avatarUrl: randomAvatar,
+            };
+            const userRef = doc(firestore, "userProfiles", newId);
+            await setDoc(userRef, newUser);
+        }
+        
+        onFormSubmit();
+        
+        toast({
+            title: `User ${isEditMode ? "Updated" : "Added"}`,
+            description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
+        });
+        
+        onOpenChange(false);
+    } catch (error) {
+         toast({
+            title: `Error ${isEditMode ? "Updating" : "Adding"} User`,
+            description: "An unexpected error occurred.",
+            variant: "destructive"
+        });
+    } finally {
+        setIsPending(false);
     }
-    
-    onFormSubmit(submittedUser);
-    
-    toast({
-        title: `User ${isEditMode ? "Updated" : "Added"}`,
-        description: `${data.firstName} ${data.lastName} has been successfully ${isEditMode ? "updated" : "added"}.`,
-    });
-    
-    setIsPending(false);
-    onOpenChange(false);
   };
 
   return (

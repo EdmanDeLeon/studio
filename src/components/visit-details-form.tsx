@@ -4,12 +4,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useState } from "react";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { visitReasons, type College } from "@/lib/types";
+import { visitReasons } from "@/lib/types";
+import { useFirestore } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   reason: z.string({ required_error: "Please select a reason for your visit." }),
@@ -29,11 +32,12 @@ type VisitDetailsFormData = z.infer<typeof formSchema>;
 type VisitDetailsFormProps = {
   onSubmitSuccess: () => void;
   userId: string;
-  userCollege: College;
 };
 
-export function VisitDetailsForm({ onSubmitSuccess, userId, userCollege }: VisitDetailsFormProps) {
+export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormProps) {
   const [isPending, setIsPending] = useState(false);
+  const firestore = useFirestore();
+  const { toast } = useToast();
 
   const form = useForm<VisitDetailsFormData>({
     resolver: zodResolver(formSchema),
@@ -45,20 +49,27 @@ export function VisitDetailsForm({ onSubmitSuccess, userId, userCollege }: Visit
   
   const reasonValue = form.watch("reason");
 
-  const onSubmit = (data: VisitDetailsFormData) => {
+  const onSubmit = async (data: VisitDetailsFormData) => {
     setIsPending(true);
     
-    // This is a non-blocking mock submission.
-    // In a real app, this would write to the database.
-    console.log("Submitting visit log (mock):", {
+    const visitLog = {
       userId,
-      college: userCollege,
       reasonForVisit: data.reason === 'Other' ? data.otherReason : data.reason,
-      entryTime: new Date(),
-    });
-    
-    // Immediately call success as we are not waiting for a database write.
-    onSubmitSuccess();
+      entryTime: serverTimestamp(),
+    };
+
+    try {
+        const visitsCollectionRef = collection(firestore, 'userProfiles', userId, 'libraryVisits');
+        await addDoc(visitsCollectionRef, visitLog);
+        onSubmitSuccess();
+    } catch (error) {
+        toast({
+            title: "Error Logging Visit",
+            description: "Could not save your visit details. Please try again.",
+            variant: "destructive"
+        });
+        setIsPending(false);
+    }
   };
 
   return (

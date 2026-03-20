@@ -1,11 +1,13 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { useFirestore, useUser } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,6 +36,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
 import { colleges } from '@/lib/types';
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const signupFormSchema = z.object({
   firstName: z.string().min(1, 'First name is required.'),
@@ -48,48 +51,81 @@ function SignupFormComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user: firebaseUser, isUserLoading } = useUser();
   const [isPending, setIsPending] = useState(false);
 
-  const email = searchParams.get('email');
+  const emailFromParams = searchParams.get('email');
+  const uidFromParams = searchParams.get('uid');
 
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupFormSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: email || '',
+      email: emailFromParams || '',
       college: undefined,
     },
   });
+  
+  useEffect(() => {
+    // If we get user info from Firebase Auth, populate the form
+    if (firebaseUser && !form.getValues('email')) {
+      form.setValue('email', firebaseUser.email || '');
+      const nameParts = firebaseUser.displayName?.split(' ') || [];
+      form.setValue('firstName', nameParts[0] || '');
+      form.setValue('lastName', nameParts.slice(1).join(' ') || '');
+    } else if (emailFromParams) {
+        form.setValue('email', emailFromParams);
+    }
+  }, [firebaseUser, emailFromParams, form]);
 
-  if (!email) {
-    // If there is no email, we cannot proceed with sign up.
-    // Redirect back to login page.
+
+  const uid = firebaseUser?.uid || uidFromParams;
+
+  if (!isUserLoading && !uid) {
+    // If there is no user and no UID, we cannot proceed.
+    toast({ title: 'Authentication Error', description: 'Please log in first to create an account.', variant: 'destructive'});
     if (typeof window !== 'undefined') {
         router.replace('/login');
     }
     return null;
   }
 
-  const onSubmit = (data: SignupFormData) => {
+  const onSubmit = async (data: SignupFormData) => {
+    if (!uid) {
+        toast({ title: 'Error', description: 'User ID is missing. Cannot create account.', variant: 'destructive'});
+        return;
+    }
     setIsPending(true);
 
-    // Simulate an async action and then redirect
-    setTimeout(() => {
+    const avatarPlaceholders = PlaceHolderImages.filter(img => img.id.startsWith('avatar-'));
+    const avatarIndex = (uid.charCodeAt(0) || 0) % avatarPlaceholders.length;
+    const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
+
+    const newUserProfile = {
+        id: uid,
+        ...data,
+        role: 'user' as const,
+        isBlocked: false,
+        avatarUrl: randomAvatar,
+    };
+
+    try {
+        await setDoc(doc(firestore, "userProfiles", uid), newUserProfile);
         toast({
             title: 'Account Created!',
             description: 'Your account has been successfully created. Please log your visit.',
         });
-        
-        const query = new URLSearchParams({
-            email: data.email,
-            firstName: data.firstName,
-            lastName: data.lastName,
-            college: data.college,
+        router.push(`/welcome?uid=${uid}`);
+    } catch (error) {
+        toast({
+            title: 'Error Creating Account',
+            description: 'There was a problem saving your profile. Please try again.',
+            variant: 'destructive',
         });
-
-        router.push(`/welcome?${query.toString()}`);
-    }, 500);
+        setIsPending(false);
+    }
   };
 
   return (
@@ -171,8 +207,8 @@ function SignupFormComponent() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full" disabled={isPending}>
-                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="submit" className="w-full" disabled={isPending || isUserLoading}>
+                  {isPending || isUserLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Create Account & Log Visit
                 </Button>
               </form>

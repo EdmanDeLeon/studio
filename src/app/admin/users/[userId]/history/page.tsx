@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
-import type { Timestamp } from 'firebase/firestore';
+import { collection, doc, Timestamp } from 'firebase/firestore';
 
 import type { User, VisitLog } from '@/lib/types';
-import { mockUsers, mockVisitLogs } from '@/lib/data';
+import { useDoc, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -24,10 +24,15 @@ const getDate = (time: Timestamp | Date) => {
 export default function UserHistoryPage({ params }: { params: { userId: string } }) {
   const router = useRouter();
   const userId = params.userId;
+  const firestore = useFirestore();
 
-  const user = mockUsers.find(u => u.id === userId);
-  const visitLogs = mockVisitLogs.filter(log => log.userId === userId);
-  const isLoading = false;
+  const userRef = useMemoFirebase(() => doc(firestore, 'userProfiles', userId), [firestore, userId]);
+  const { data: user, isLoading: isUserLoading } = useDoc<User>(userRef);
+
+  const visitsRef = useMemoFirebase(() => collection(firestore, 'userProfiles', userId, 'libraryVisits'), [firestore, userId]);
+  const { data: visitLogs, isLoading: areVisitsLoading } = useCollection<VisitLog>(visitsRef);
+
+  const isLoading = isUserLoading || areVisitsLoading;
 
   return (
     <div className="space-y-6">

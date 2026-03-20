@@ -3,67 +3,27 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookHeart, CircleUserRound } from 'lucide-react';
+import { doc } from 'firebase/firestore';
 
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VisitDetailsForm } from '@/components/visit-details-form';
 import { Logo } from '@/components/logo';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { User, College } from '@/lib/types';
-import { mockUsers } from '@/lib/data';
-
-const USERS_STORAGE_KEY = 'neu-liblog-users';
+import type { User } from '@/lib/types';
+import { useDoc, useFirestore, useMemoFirebase } from '@/firebase';
 
 function WelcomeComponent() {
   const [isFormOpen, setIsFormOpen] = useState(true);
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const firestore = useFirestore();
   
-  const email = searchParams.get('email');
-  const [users, setUsers] = useState<User[]>([]);
-  const [isUserLoading, setIsUserLoading] = useState(true);
+  const uid = searchParams.get('uid');
 
-  useEffect(() => {
-    try {
-      const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-      if (storedUsers) {
-        setUsers(JSON.parse(storedUsers));
-      } else {
-        // Fallback to mock data if nothing in storage
-        setUsers(mockUsers);
-      }
-    } catch (error) {
-      console.error("Failed to read from localStorage:", error);
-      setUsers(mockUsers); // Fallback to mock data on error
-    } finally {
-      setIsUserLoading(false);
-    }
-  }, []);
-  
-  // Try to find an existing user from the users list (loaded from localStorage)
-  let user: User | undefined = email ? users.find(u => u.email === email) : undefined;
-
-  // If user not found in user list, check for new user details from signup page query params
-  if (!user && email) {
-    const firstName = searchParams.get('firstName');
-    const lastName = searchParams.get('lastName');
-    const college = searchParams.get('college') as College;
-    
-    // If all details for a new user are present, create a temporary user object
-    if (firstName && lastName && college) {
-      user = {
-        id: `new-user-${Date.now()}`,
-        firstName,
-        lastName,
-        email,
-        college,
-        role: 'user', // New signups are always 'user'
-        isBlocked: false,
-        avatarUrl: `https://picsum.photos/seed/${email}/40/40`, // Generate a consistent placeholder avatar
-      };
-    }
-  }
+  const userRef = useMemoFirebase(() => (uid ? doc(firestore, 'userProfiles', uid) : null), [firestore, uid]);
+  const { data: user, isLoading: isUserLoading } = useDoc<User>(userRef);
 
   useEffect(() => {
     if (!isFormOpen) {
@@ -88,8 +48,8 @@ function WelcomeComponent() {
     });
   };
 
-  if (!isUserLoading && !email) {
-    // If there's no email in the query params and we're not loading, something is wrong. Redirect to login.
+  if (!isUserLoading && !uid) {
+    // If there's no uid in the query params and we're not loading, something is wrong. Redirect to login.
     if (typeof window !== 'undefined') {
         router.replace('/login');
     }
@@ -128,16 +88,16 @@ function WelcomeComponent() {
                         Please provide the following details for our records. Click submit when you're done.
                         </DialogDescription>
                     </DialogHeader>
-                    <VisitDetailsForm onSubmitSuccess={handleFormSubmit} userId={user.id} userCollege={user.college} />
+                    <VisitDetailsForm onSubmitSuccess={handleFormSubmit} userId={user.id} />
                  </>
             )}
-            {!isUserLoading && !user && email && (
+            {!isUserLoading && !user && uid && (
                 <div className="flex flex-col items-center gap-4 text-center py-8">
                     <CircleUserRound className="w-12 h-12 text-destructive" />
                     <DialogHeader>
                         <DialogTitle>Login Error</DialogTitle>
                         <DialogDescription>
-                            No user account found for "{email}". Please try again or contact an administrator.
+                            No user account found. Please try again or sign up.
                         </DialogDescription>
                     </DialogHeader>
                 </div>

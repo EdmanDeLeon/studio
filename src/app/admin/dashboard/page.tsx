@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { ArrowDown, ArrowUp, BookCopy, CalendarClock, PieChart as PieChartIcon, UserCheck, Users } from 'lucide-react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import type { Timestamp } from 'firebase/firestore';
+import { collection, collectionGroup, doc, Timestamp } from 'firebase/firestore';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { VisitLog, User, College } from '@/lib/types';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { AiCategorizerDialog } from '@/components/admin/ai-categorizer-dialog';
-import { mockUsers, mockVisitLogs } from '@/lib/data';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 
 type TimeFrame = 'day' | 'week' | 'month';
 type SortKey = 'visitor' | 'reasonForVisit' | 'entryTime';
@@ -83,10 +83,15 @@ export default function DashboardPage() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('day');
   const [filteredLogs, setFilteredLogs] = useState<VisitLog[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'entryTime', direction: 'desc' });
+  const firestore = useFirestore();
 
-  const { data: visitLogs } = { data: mockVisitLogs };
-  const { data: users } = { data: mockUsers };
-  const isLoading = false;
+  const visitLogsQuery = useMemoFirebase(() => collectionGroup(firestore, 'libraryVisits'), [firestore]);
+  const { data: visitLogs, isLoading: isVisitsLoading } = useCollection<VisitLog>(visitLogsQuery);
+
+  const usersQuery = useMemoFirebase(() => collection(firestore, 'userProfiles'), [firestore]);
+  const { data: users, isLoading: isUsersLoading } = useCollection<User>(usersQuery);
+
+  const isLoading = isVisitsLoading || isUsersLoading;
 
   const usersById = useMemo(() => {
     if (!users) return new Map();
@@ -98,7 +103,9 @@ export default function DashboardPage() {
       const now = new Date();
       let interval;
       if (timeFrame === 'day') {
-        interval = { start: subDays(now, 1), end: now };
+        const dayStart = new Date(now);
+        dayStart.setHours(0,0,0,0);
+        interval = { start: dayStart, end: now };
       } else if (timeFrame === 'week') {
         interval = { start: startOfWeek(now), end: endOfWeek(now) };
       } else { // month
