@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth, useUser } from '@/firebase';
@@ -11,6 +12,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -155,6 +157,14 @@ export default function AdminLoginPage() {
                 </Button>
             </div>
           </CardContent>
+          <CardFooter className="flex justify-center text-sm text-muted-foreground pt-6">
+             <p>
+              Not an administrator?{' '}
+              <Link href="/login" className="underline text-primary hover:text-primary/80">
+                Return to Visitor Log In
+              </Link>
+            </p>
+          </CardFooter>
         </Card>
       </div>
     </main>
