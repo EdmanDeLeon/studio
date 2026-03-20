@@ -53,7 +53,7 @@ export default function AdminLoginPage() {
   
   const [appUsers, setAppUsers] = useState<User[]>([]);
   const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
-  const [isProcessingLogin, setIsProcessingLogin] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // Load user data from localStorage
   useEffect(() => {
@@ -74,32 +74,36 @@ export default function AdminLoginPage() {
     }
   }, []);
   
-  // This effect runs after a Google Sign-In attempt to verify admin role and redirect.
+  // This effect runs whenever the firebase user's state changes.
   useEffect(() => {
-    // Only proceed if we are actively trying to log in and have a user object.
-    if (!isProcessingLogin || isFirebaseUserLoading || isAppUsersLoading || !firebaseUser || !firebaseUser.email) {
+    // If Firebase or app user data is still loading, wait.
+    if (isFirebaseUserLoading || isAppUsersLoading) {
       return;
     }
 
-    const email = firebaseUser.email;
-    const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    // If there is a logged-in user, verify their role.
+    if (firebaseUser?.email) {
+      const email = firebaseUser.email.toLowerCase();
+      const appUser = appUsers.find(u => u.email.toLowerCase() === email);
 
-    if (appUser?.role === 'admin') {
-      toast({
-        title: 'Admin login successful',
-        description: 'Redirecting to dashboard...',
-      });
-      router.push('/admin/dashboard');
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: 'This account does not have admin privileges.',
-      });
-      auth?.signOut();
-      setIsProcessingLogin(false); // Reset state after failed login
+      if (appUser?.role === 'admin') {
+        // Logged-in user is an admin, redirect them to the dashboard.
+        router.push('/admin/dashboard');
+      } else {
+        // The user is authenticated with Firebase but is not an admin in our app.
+        // Show an error and sign them out.
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'This account does not have admin privileges.',
+        });
+        auth?.signOut();
+        setIsSigningIn(false);
+      }
     }
-  }, [firebaseUser, isProcessingLogin, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth]);
+    // If there's no firebaseUser, we do nothing and simply let the login page render.
+  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth]);
+
 
   const handleGoogleSignIn = async () => {
     if (!auth) {
@@ -107,8 +111,7 @@ export default function AdminLoginPage() {
       return;
     }
     
-    // Set processing state to true to trigger the useEffect after sign-in.
-    setIsProcessingLogin(true);
+    setIsSigningIn(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
         prompt: 'select_account'
@@ -116,7 +119,7 @@ export default function AdminLoginPage() {
 
     try {
       await signInWithPopup(auth, provider);
-      // After successful popup, the `useEffect` will handle role verification and redirection.
+      // After successful popup, the `useEffect` above will handle verification and redirection.
     } catch (error: any) {
       // Don't show an error toast if the user closes the popup.
       if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
@@ -126,12 +129,12 @@ export default function AdminLoginPage() {
             description: error.message || 'An unexpected error occurred.',
         });
       }
-      setIsProcessingLogin(false); // Reset processing state if sign-in fails or is cancelled.
+       setIsSigningIn(false); // Reset processing state if sign-in fails or is cancelled.
     }
   };
   
   // The main loading state considers all async operations.
-  const isLoading = isProcessingLogin || isAppUsersLoading || isFirebaseUserLoading;
+  const isLoading = isSigningIn || isAppUsersLoading || isFirebaseUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -153,7 +156,7 @@ export default function AdminLoginPage() {
                 disabled={isLoading}
                 >
                 {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
-                {isProcessingLogin ? 'Verifying...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In with Google')}
+                {isSigningIn ? 'Verifying...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In with Google')}
                 </Button>
             </div>
           </CardContent>

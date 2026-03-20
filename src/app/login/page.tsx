@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -64,7 +64,7 @@ export default function LoginPage() {
   
   const [appUsers, setAppUsers] = useState<User[]>([]);
   const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
-  const [isProcessingLogin, setIsProcessingLogin] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const form = useForm<LoginFormInputs>({
     resolver: zodResolver(loginFormSchema),
@@ -89,10 +89,9 @@ export default function LoginPage() {
     }
   }, []);
 
-  const processLogin = (email: string) => {
+  const processLogin = useCallback((email: string) => {
     if (!email) return;
 
-    setIsProcessingLogin(true);
     const normalizedEmail = email.toLowerCase();
     const appUser = appUsers.find(u => u.email.toLowerCase() === normalizedEmail);
     
@@ -106,7 +105,7 @@ export default function LoginPage() {
         description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
       });
       auth?.signOut();
-      setIsProcessingLogin(false);
+      setIsSigningIn(false);
       return;
     }
     
@@ -134,15 +133,17 @@ export default function LoginPage() {
     }
 
     // Reset processing state after a delay to allow for navigation
-    setTimeout(() => setIsProcessingLogin(false), 1000);
-  };
+    setTimeout(() => setIsSigningIn(false), 1000);
+  }, [appUsers, router, toast, auth]);
 
   useEffect(() => {
-    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser?.email || isProcessingLogin) {
+    // Wait until all data is loaded and there is a user object.
+    if (isFirebaseUserLoading || isAppUsersLoading || !firebaseUser?.email) {
       return;
     }
+    // If a user is authenticated, process their login.
     processLogin(firebaseUser.email);
-  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading]);
+  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, processLogin]);
 
 
   const handleGoogleSignIn = async () => {
@@ -151,7 +152,7 @@ export default function LoginPage() {
       return;
     }
     
-    setIsProcessingLogin(true);
+    setIsSigningIn(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
@@ -165,15 +166,16 @@ export default function LoginPage() {
             description: error.message || 'An unexpected error occurred.',
         });
       }
-      setIsProcessingLogin(false);
+      setIsSigningIn(false);
     }
   };
 
   const onEmailSubmit = (data: LoginFormInputs) => {
+    setIsSigningIn(true);
     processLogin(data.email);
   };
 
-  const isLoading = isProcessingLogin || isAppUsersLoading || isFirebaseUserLoading;
+  const isLoading = isSigningIn || isAppUsersLoading || isFirebaseUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
