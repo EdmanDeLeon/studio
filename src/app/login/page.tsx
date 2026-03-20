@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent } from 'react';
 import { KeyRound, Mail, LayoutDashboard, LogIn, Loader2 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { useAuth } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -61,85 +61,92 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
+  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
   
-  const [users, setUsers] = useState<User[]>([]);
-  const [isUsersLoading, setIsUsersLoading] = useState(true);
-  const [isPending, setIsPending] = useState(false);
-
-  const [result, setResult] = useState<{ status?: 'success' | 'needs-signup' | 'error'; role?: 'admin' | 'user'; email?: string; message?: string, errors?: { email?: string[] } }>({});
+  const [appUsers, setAppUsers] = useState<User[]>([]);
+  const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
+  const [isProcessingLogin, setIsProcessingLogin] = useState(false);
   const [showAdminChoice, setShowAdminChoice] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
 
   useEffect(() => {
-    setIsUsersLoading(true);
+    setIsAppUsersLoading(true);
     try {
       const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
       if (storedUsers) {
-        setUsers(JSON.parse(storedUsers));
+        setAppUsers(JSON.parse(storedUsers));
       } else {
-        setUsers(mockUsers);
+        setAppUsers(mockUsers);
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mockUsers));
       }
     } catch (error) {
       console.error("Failed to access localStorage:", error);
-      setUsers(mockUsers);
+      setAppUsers(mockUsers);
     } finally {
-      setIsUsersLoading(false);
+      setIsAppUsersLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!result.status) return;
-
-    if (result.status === 'success' && result.role === 'admin' && result.email) {
-      toast({
-        title: 'Admin login successful',
-        description: 'Please choose how to proceed.',
-      });
-      setShowAdminChoice(true);
-    } else if (result.status === 'success' && result.role === 'user' && result.email) {
-      toast({
-        title: 'Login successful!',
-        description: 'Please provide your visit details.',
-      });
-      router.push(`/welcome?email=${encodeURIComponent(result.email)}`);
-    } else if (result.status === 'needs-signup' && result.email) {
-        toast({
-            title: 'Account Not Found',
-            description: 'Please complete the sign up form to create your account.',
-        });
-        router.push(`/signup?email=${encodeURIComponent(result.email)}`);
-    } else if (result.status === 'error' || result.message) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: result.message,
-      });
+    // This effect handles the logic after a user has successfully signed in via Firebase
+    if (isFirebaseUserLoading || isAppUsersLoading || isProcessingLogin || !firebaseUser || !firebaseUser.email) {
+      return;
     }
-
-    setIsPending(false);
-  }, [result, router, toast]);
-
-  const processLogin = (email: string) => {
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
+    // Prevent this effect from running multiple times for the same login
+    setIsProcessingLogin(true);
+
+    const email = firebaseUser.email;
+    const appUser = appUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+
     const isAdminDomain = email.endsWith('@neu.edu.ph');
     const isUserDomain = email.endsWith('@neu.edu');
 
     if (!isAdminDomain && !isUserDomain) {
-      return { status: 'error', message: 'Invalid institutional email.' } as const;
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'Invalid institutional email. Please use a @neu.edu or @neu.edu.ph account.',
+      });
+      auth.signOut(); // Sign out the user with the invalid email
+      setIsProcessingLogin(false);
+      return;
     }
 
-    if (user) {
-      return { status: 'success', role: user.role, email: user.email } as const;
+    if (appUser) {
+      // User exists in our app's database
+      if (appUser.role === 'admin') {
+        toast({
+          title: 'Admin login successful',
+          description: 'Please choose how to proceed.',
+        });
+        setAdminEmail(email);
+        setShowAdminChoice(true);
+      } else {
+        toast({
+          title: 'Login successful!',
+          description: 'Please provide your visit details.',
+        });
+        router.push(`/welcome?email=${encodeURIComponent(email)}`);
+      }
     } else {
-      return { status: 'needs-signup', email } as const;
+      // User does not exist, redirect to signup
+      toast({
+          title: 'Account Not Found',
+          description: 'Please complete the sign up form to create your account.',
+      });
+      router.push(`/signup?email=${encodeURIComponent(email)}`);
     }
-  }
+
+    // Do not reset isProcessingLogin here as we are navigating away.
+    // It will be reset on component unmount or next mount.
+
+  }, [firebaseUser, isFirebaseUserLoading, isAppUsersLoading, appUsers, router, toast, auth, isProcessingLogin]);
+
 
   const handleEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsPending(true);
-    setResult({});
+    setIsProcessingLogin(true);
 
     const formData = new FormData(event.currentTarget);
     const email = formData.get('email') as string;
@@ -147,15 +154,37 @@ export default function LoginPage() {
     const validatedFields = loginSchema.safeParse({ email });
 
     if (!validatedFields.success) {
-      setResult({
-        status: 'error',
-        errors: validatedFields.error.flatten().fieldErrors,
-        message: validatedFields.error.flatten().fieldErrors.email?.[0] ?? 'Invalid email format.',
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: validatedFields.error.flatten().fieldErrors.email?.[0] ?? 'Invalid email format.',
       });
+      setIsProcessingLogin(false);
+      return;
+    }
+    
+    // For email form, we just check our local list and redirect. This doesn't create a real Firebase Auth session.
+    const appUser = appUsers.find(u => u.email.toLowerCase() === validatedFields.data.email.toLowerCase());
+    
+    const isAdminDomain = validatedFields.data.email.endsWith('@neu.edu.ph');
+    const isUserDomain = validatedFields.data.email.endsWith('@neu.edu');
+
+    if (!isAdminDomain && !isUserDomain) {
+      toast({ variant: 'destructive', title: 'Login Failed', description: 'Invalid institutional email.' });
+      setIsProcessingLogin(false);
       return;
     }
 
-    setResult(processLogin(validatedFields.data.email));
+    if (appUser) {
+      if (appUser.role === 'admin') {
+        setAdminEmail(appUser.email);
+        setShowAdminChoice(true);
+      } else {
+        router.push(`/welcome?email=${encodeURIComponent(appUser.email)}`);
+      }
+    } else {
+      router.push(`/signup?email=${encodeURIComponent(validatedFields.data.email)}`);
+    }
   }
 
   const handleGoogleSignIn = async () => {
@@ -164,20 +193,24 @@ export default function LoginPage() {
       return;
     }
     
-    setIsPending(true);
+    setIsProcessingLogin(true);
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+        prompt: 'select_account'
+    });
     try {
-      const popupResult = await signInWithPopup(auth, provider);
-      const user = popupResult.user;
-      if (user && user.email) {
-        setResult(processLogin(user.email));
-      } else {
-        throw new Error('No user or email found after Google sign-in.');
-      }
+      await signInWithPopup(auth, provider);
+      // The useEffect hook will handle the logic after successful login.
     } catch (error: any) {
-      setResult({ status: 'error', message: error.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled.' : (error.message || 'An unexpected error occurred during Google sign-in.') });
-    } finally {
-        setIsPending(false);
+      // Don't show toast for user-cancelled popups
+      if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+        toast({
+            variant: 'destructive',
+            title: 'Google Sign-In Failed',
+            description: error.message || 'An unexpected error occurred.',
+        });
+      }
+      setIsProcessingLogin(false); // Reset processing state only if sign-in fails
     }
   };
 
@@ -186,9 +219,13 @@ export default function LoginPage() {
     if (destination === 'dashboard') {
       router.push('/admin/dashboard');
     } else {
-      router.push(`/welcome?email=${encodeURIComponent(result.email!)}`);
+      router.push(`/welcome?email=${encodeURIComponent(adminEmail)}`);
     }
+    // Don't sign out here, allow navigation
+    setIsProcessingLogin(false);
   };
+
+  const isLoading = isProcessingLogin || isAppUsersLoading || isFirebaseUserLoading;
 
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -214,17 +251,12 @@ export default function LoginPage() {
                     type="email"
                     placeholder="juan.delacruz@neu.edu"
                     required
-                    disabled={isPending || isUsersLoading}
+                    disabled={isLoading}
                   />
-                  {result?.errors?.email && (
-                    <p className="text-sm text-destructive">
-                      {result.errors.email[0]}
-                    </p>
-                  )}
                 </div>
-                <Button type="submit" className="w-full" disabled={isPending || isUsersLoading}>
-                  {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
-                  {isPending ? 'Logging In...' : (isUsersLoading ? 'Loading...' : 'Log In')}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : <KeyRound className="mr-2" />}
+                  {isProcessingLogin ? 'Logging In...' : (isAppUsersLoading || isFirebaseUserLoading ? 'Loading...' : 'Log In')}
                 </Button>
               </form>
             <div className="relative my-6">
@@ -241,16 +273,22 @@ export default function LoginPage() {
               variant="outline"
               className="w-full gap-2"
               onClick={handleGoogleSignIn}
-              disabled={isPending || isUsersLoading}
+              disabled={isLoading}
             >
-              {isPending || isUsersLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+              {isLoading ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
               Google
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      <Dialog open={showAdminChoice} onOpenChange={setShowAdminChoice}>
+      <Dialog open={showAdminChoice} onOpenChange={(open) => {
+          if (!open) {
+              setShowAdminChoice(false);
+              setIsProcessingLogin(false);
+              auth.signOut(); // Sign out if the dialog is closed without a choice
+          }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Choose Your Destination</DialogTitle>
