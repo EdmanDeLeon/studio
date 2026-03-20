@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Bell, Clock, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import { useUser, useAuth } from '@/firebase';
+import type { User } from '@/lib/types';
+import { mockUsers } from '@/lib/data';
 
 import {
   SidebarProvider,
@@ -19,7 +22,6 @@ import {
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { mockAdmin } from '@/lib/data';
 import { Logo } from '@/components/logo';
 
 const menuItems = [
@@ -49,7 +51,66 @@ function RealTimeClock() {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const adminName = `${mockAdmin.firstName} ${mockAdmin.lastName}`;
+  const router = useRouter();
+  const { user: firebaseUser, isUserLoading } = useUser();
+  const auth = useAuth();
+  const [appUser, setAppUser] = useState<User | null>(null);
+  const [isAppUsersLoading, setIsAppUsersLoading] = useState(true);
+
+  useEffect(() => {
+    if (isUserLoading) return;
+
+    const storedUsersString = localStorage.getItem('neu-liblog-users');
+    const allUsers: User[] = storedUsersString ? JSON.parse(storedUsersString) : mockUsers;
+
+    if (!firebaseUser) {
+      // If not logged into Firebase and not on the login page, redirect to login
+      if (pathname !== '/admin/login') {
+        router.replace('/admin/login');
+      }
+      setIsAppUsersLoading(false);
+      return;
+    }
+
+    // If there is a Firebase user, check their role in our app's user list
+    const currentAppUser = allUsers.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
+
+    if (currentAppUser?.role === 'admin') {
+      setAppUser(currentAppUser);
+      // If a logged-in admin lands on the login page, redirect them to the dashboard
+      if (pathname === '/admin/login') {
+        router.replace('/admin/dashboard');
+      }
+    } else {
+      // If the user is not an admin or not in our list, sign them out and redirect
+      auth?.signOut();
+      setAppUser(null);
+      if (pathname !== '/admin/login') {
+        router.replace('/admin/login');
+      }
+    }
+    setIsAppUsersLoading(false);
+
+  }, [firebaseUser, isUserLoading, pathname, router, auth]);
+
+
+  // If we are on the login path, just render the children (the login page itself).
+  // The useEffect above will handle redirecting away if the user is already logged in.
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
+  // For any other admin route, ensure user is authenticated and verified as an admin.
+  // Show a loading state until verification is complete.
+  if (isUserLoading || isAppUsersLoading || !appUser) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <p className="text-muted-foreground">Authenticating...</p>
+      </div>
+    );
+  }
+
+  const adminName = `${appUser.firstName} ${appUser.lastName}`;
 
   return (
     <SidebarProvider>
@@ -77,12 +138,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <SidebarFooter>
           <div className="flex items-center gap-3">
              <Avatar className="h-9 w-9">
-                <AvatarImage src={mockAdmin.avatarUrl} alt={adminName} />
-                <AvatarFallback>{mockAdmin.firstName.charAt(0)}{mockAdmin.lastName.charAt(0)}</AvatarFallback>
+                <AvatarImage src={appUser.avatarUrl} alt={adminName} />
+                <AvatarFallback>{appUser.firstName.charAt(0)}{appUser.lastName.charAt(0)}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col text-sm group-data-[collapsible=icon]:hidden">
                 <span className="font-semibold text-sidebar-foreground">{adminName}</span>
-                <span className="text-xs text-sidebar-foreground/70">{mockAdmin.email}</span>
+                <span className="text-xs text-sidebar-foreground/70">{appUser.email}</span>
             </div>
           </div>
         </SidebarFooter>
@@ -99,12 +160,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Bell className="h-5 w-5" />
               <span className="sr-only">Toggle notifications</span>
             </Button>
-            <Link href="/login">
-              <Button variant="outline" size="sm">
+            
+            <Button variant="outline" size="sm" onClick={() => auth?.signOut()}>
                 <LogOut className="mr-2 h-4 w-4"/>
                 Logout
-              </Button>
-            </Link>
+            </Button>
+            
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-6">
