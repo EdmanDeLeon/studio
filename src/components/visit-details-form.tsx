@@ -59,7 +59,7 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
     };
 
     try {
-        const visitsCollectionRef = collection(firestore, 'userProfiles', userId, 'libraryVisits');
+        const visitsCollectionRef = collection(firestore, 'users', userId, 'libraryVisits');
         await addDoc(visitsCollectionRef, visitLog);
         onSubmitSuccess();
     } catch (error) {
@@ -121,3 +121,5 @@ export function VisitDetailsForm({ onSubmitSuccess, userId }: VisitDetailsFormPr
     </Form>
   );
 }
+
+    

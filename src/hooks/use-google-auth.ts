@@ -33,7 +33,7 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
         throw new Error("Email not available from Google Sign-In.");
       }
       
-      const userDocRef = doc(firestore, 'userProfiles', user.uid);
+      const userDocRef = doc(firestore, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
       if (role === 'admin') {
@@ -75,3 +75,5 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
 
   return { signInWithGoogle, isSigningIn };
 }
+
+    

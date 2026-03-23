@@ -52,7 +52,7 @@ export default function UserManagementPage() {
   const router = useRouter();
   const firestore = useFirestore();
 
-  const usersQuery = useMemoFirebase(() => collection(firestore, 'userProfiles'), [firestore]);
+  const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
   const { data: users, isLoading } = useCollection<User>(usersQuery);
 
   const filteredUsers = useMemo(() => {
@@ -94,7 +94,7 @@ export default function UserManagementPage() {
     if (!userToDelete) return;
 
     try {
-      await deleteDoc(doc(firestore, 'userProfiles', userToDelete.id));
+      await deleteDoc(doc(firestore, 'users', userToDelete.id));
       toast({
         title: "User Deleted",
         description: `${userToDelete.firstName} ${userToDelete.lastName} has been removed.`,
@@ -112,7 +112,7 @@ export default function UserManagementPage() {
   };
 
   const toggleUserStatus = async (userId: string, currentBlockedStatus: boolean) => {
-    const userRef = doc(firestore, 'userProfiles', userId);
+    const userRef = doc(firestore, 'users', userId);
     try {
         await updateDoc(userRef, { isBlocked: !currentBlockedStatus });
         const user = users?.find(u => u.id === userId);
@@ -270,3 +270,5 @@ export default function UserManagementPage() {
     </>
   );
 }
+
+    

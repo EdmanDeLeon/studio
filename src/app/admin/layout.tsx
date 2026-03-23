@@ -57,7 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const firestore = useFirestore();
 
   const userProfileRef = useMemoFirebase(
-      () => (firestore && firebaseUser ? doc(firestore, 'userProfiles', firebaseUser.uid) : null),
+      () => (firestore && firebaseUser ? doc(firestore, 'users', firebaseUser.uid) : null),
       [firestore, firebaseUser]
   );
   const { data: appUser, isLoading: isAppUserLoading } = useDoc<User>(userProfileRef);
@@ -178,3 +178,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     </SidebarProvider>
   );
 }
+
+    

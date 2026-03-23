@@ -22,7 +22,7 @@ function WelcomeComponent() {
   
   const uid = searchParams.get('uid');
 
-  const userRef = useMemoFirebase(() => (uid ? doc(firestore, 'userProfiles', uid) : null), [firestore, uid]);
+  const userRef = useMemoFirebase(() => (uid ? doc(firestore, 'users', uid) : null), [firestore, uid]);
   const { data: user, isLoading: isUserLoading } = useDoc<User>(userRef);
 
   useEffect(() => {
@@ -145,3 +145,5 @@ export default function WelcomePage() {
         </Suspense>
     )
 }
+
+    

@@ -26,10 +26,10 @@ export default function UserHistoryPage({ params }: { params: { userId: string }
   const userId = params.userId;
   const firestore = useFirestore();
 
-  const userRef = useMemoFirebase(() => doc(firestore, 'userProfiles', userId), [firestore, userId]);
+  const userRef = useMemoFirebase(() => doc(firestore, 'users', userId), [firestore, userId]);
   const { data: user, isLoading: isUserLoading } = useDoc<User>(userRef);
 
-  const visitsRef = useMemoFirebase(() => collection(firestore, 'userProfiles', userId, 'libraryVisits'), [firestore, userId]);
+  const visitsRef = useMemoFirebase(() => collection(firestore, 'users', userId, 'libraryVisits'), [firestore, userId]);
   const { data: visitLogs, isLoading: areVisitsLoading } = useCollection<VisitLog>(visitsRef);
 
   const isLoading = isUserLoading || areVisitsLoading;
@@ -130,3 +130,5 @@ export default function UserHistoryPage({ params }: { params: { userId: string }
     </div>
   );
 }
+
+    

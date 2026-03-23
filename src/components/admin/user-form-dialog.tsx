@@ -94,7 +94,7 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
     try {
         if (isEditMode && user) {
             // Update existing user
-            const userRef = doc(firestore, "userProfiles", user.id);
+            const userRef = doc(firestore, "users", user.id);
             await setDoc(userRef, data, { merge: true });
         } else {
             // Create new user. In a real app, this should only be done for users
@@ -111,7 +111,7 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
                 isBlocked: false,
                 avatarUrl: randomAvatar,
             };
-            const userRef = doc(firestore, "userProfiles", newId);
+            const userRef = doc(firestore, "users", newId);
             await setDoc(userRef, newUser);
         }
         
@@ -247,3 +247,5 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
     </Dialog>
   );
 }
+
+    

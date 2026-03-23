@@ -88,7 +88,7 @@ export default function DashboardPage() {
   const visitLogsQuery = useMemoFirebase(() => collectionGroup(firestore, 'libraryVisits'), [firestore]);
   const { data: visitLogs, isLoading: isVisitsLoading } = useCollection<VisitLog>(visitLogsQuery);
 
-  const usersQuery = useMemoFirebase(() => collection(firestore, 'userProfiles'), [firestore]);
+  const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
   const { data: users, isLoading: isUsersLoading } = useCollection<User>(usersQuery);
 
   const isLoading = isVisitsLoading || isUsersLoading;
@@ -412,3 +412,5 @@ function RecentVisitsTable({ logs, usersById, onSort, sortConfig }: {
       </Table>
     );
   }
+
+    

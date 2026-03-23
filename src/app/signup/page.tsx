@@ -112,7 +112,7 @@ function SignupFormComponent() {
     };
 
     try {
-        await setDoc(doc(firestore, "userProfiles", uid), newUserProfile);
+        await setDoc(doc(firestore, "users", uid), newUserProfile);
         toast({
             title: 'Account Created!',
             description: 'Your account has been successfully created. Please log your visit.',
@@ -227,3 +227,5 @@ export default function SignupPage() {
         </Suspense>
     );
 }
+
+    

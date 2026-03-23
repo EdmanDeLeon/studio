@@ -5,18 +5,18 @@
  * The primary security goal is to ensure that users can only access and manage their own data, while granting administrators global oversight and management capabilities. The rules default to denying access, only permitting actions that are explicitly allowed.
  *
  * Data Structure:
- * - /userProfiles/{userId}: Each user has a root profile document. The document ID matches their authentication UID.
- * - /userProfiles/{userId}/libraryVisits/{visitId}: A user's library visit history is stored in a nested subcollection.
+ * - /users/{userId}: Each user has a root profile document. The document ID matches their authentication UID.
+ * - /users/{userId}/libraryVisits/{visitId}: A user's library visit history is stored in a nested subcollection.
  * - /colleges/{collegeId} & /visitReasons/{reasonId}: These are top-level collections for system-wide lookup data (e.g., lists of colleges, reasons for visits).
  *
  * Key Security Decisions:
- * - Admin Role Management: A user is considered an administrator if their userProfile document has role == 'admin'.
+ * - Admin Role Management: A user is considered an administrator if their user document has role == 'admin'.
  * - User Privacy: Users are strictly prohibited from listing or viewing other users' profiles or visit histories.
  * - Role Escalation Prevention: A crucial rule prevents non-admin users from changing their own 'role' field, blocking a common privilege escalation vector.
  * - Ownership Integrity: Rules enforce that when a user creates a subcollection document (like a library visit), the document's internal `userId` field must match the user's UID, ensuring data integrity.
  *
  * Denormalization for Authorization:
- * To ensure performant and secure rules, especially for administrator queries that scan across all users' data (Collection Group Queries), the `userId` is denormalized (copied) into each `libraryVisits` document. This allows a rule to verify ownership directly from the document itself without needing a slow and costly `get()` call to its parent `userProfile` document.
+ * To ensure performant and secure rules, especially for administrator queries that scan across all users' data (Collection Group Queries), the `userId` is denormalized (copied) into each `libraryVisits` document. This allows a rule to verify ownership directly from the document itself without needing a slow and costly `get()` call to its parent `user` document.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -48,7 +48,7 @@ service cloud.firestore {
     function isAdmin() {
       // A user is an admin if their profile document has the role 'admin'.
       // This requires a get() call, which has cost implications but is necessary for role-based access.
-      return isSignedIn() && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     /**
@@ -71,9 +71,9 @@ service cloud.firestore {
 
     /**
      * @description Manages user profiles. Users can create, read, and update their own profile. Admins have full access.
-     * @path /userProfiles/{userId}
+     * @path /users/{userId}
      */
-    match /userProfiles/{userId} {
+    match /users/{userId} {
       // Users can read their own profile, Admins can read any profile.
       allow get: if isOwner(userId) || isAdmin();
       // Only admins can list all users.
@@ -100,7 +100,7 @@ service cloud.firestore {
 
       /**
        * @description Manages library visit records, nested under a user. Users can manage their own visits. Admins have read access for reporting.
-       * @path /userProfiles/{userId}/libraryVisits/{visitId}
+       * @path /users/{userId}/libraryVisits/{visitId}
        */
       match /libraryVisits/{visitId} {
         allow get: if isOwner(userId) || isAdmin();
@@ -138,3 +138,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
