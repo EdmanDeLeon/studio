@@ -23,7 +23,7 @@ import { Logo } from '@/components/logo';
 import { useGoogleAuth } from '@/hooks/use-google-auth';
 
 const loginFormSchema = z.object({
-    email: z.string().email('Please enter a valid email address.'),
+    studentNumber: z.string().regex(/^[0-9]+$/, 'Please enter a valid student number.'),
 });
 type LoginFormInputs = z.infer<typeof loginFormSchema>;
 
@@ -57,16 +57,17 @@ export default function LoginPage() {
 
   const form = useForm<LoginFormInputs>({
     resolver: zodResolver(loginFormSchema),
-    defaultValues: { email: '' },
+    defaultValues: { studentNumber: '' },
   });
 
-  const onEmailSubmit = (data: LoginFormInputs) => {
-    // This is a mock sign-in for email.
+  const onStudentNumberSubmit = (data: LoginFormInputs) => {
+    // This is a mock sign-in that constructs an email from the student number.
+    const email = `${data.studentNumber}@neu.edu.ph`;
     toast({
-        title: 'Check your email',
-        description: 'For this demo, we will redirect you to the signup page. In a real app, you would receive a login link.',
+        title: 'Processing Student Number',
+        description: 'Redirecting you to complete your account setup.',
     });
-    router.push(`/signup?email=${encodeURIComponent(data.email)}`);
+    router.push(`/signup?email=${encodeURIComponent(email)}`);
   };
 
   return (
@@ -82,23 +83,23 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="space-y-4">
              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onEmailSubmit)} className="space-y-4">
+                <form onSubmit={form.handleSubmit(onStudentNumberSubmit)} className="space-y-4">
                     <FormField
                     control={form.control}
-                    name="email"
+                    name="studentNumber"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel className="sr-only">Email</FormLabel>
+                        <FormLabel className="sr-only">Student Number</FormLabel>
                         <FormControl>
-                            <Input placeholder="your.email@neu.edu.ph" {...field} disabled={isSigningIn} />
+                            <Input placeholder="Enter your Student Number" {...field} disabled={isSigningIn || form.formState.isSubmitting} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
-                    <Button type="submit" className="w-full" disabled={isSigningIn}>
-                        {isSigningIn && form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Continue with Email
+                    <Button type="submit" className="w-full" disabled={isSigningIn || form.formState.isSubmitting}>
+                        {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Continue with Student Number
                     </Button>
                 </form>
             </Form>
@@ -117,9 +118,9 @@ export default function LoginPage() {
                 variant="outline"
                 className="w-full gap-2"
                 onClick={signInWithGoogle}
-                disabled={isSigningIn}
+                disabled={isSigningIn || form.formState.isSubmitting}
               >
-                {isSigningIn && !form.formState.isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
+                {isSigningIn ? <Loader2 className="animate-spin mr-2" /> : <GoogleIcon className="h-5 w-5" />}
                 Google
               </Button>
             </div>
