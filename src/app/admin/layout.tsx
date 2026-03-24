@@ -56,13 +56,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const auth = useAuth();
   const firestore = useFirestore();
 
+  const isLoginPage = pathname === '/admin/login';
   const userProfileRef = useMemoFirebase(
-      () => (firestore && firebaseUser ? doc(firestore, 'users', firebaseUser.uid) : null),
-      [firestore, firebaseUser]
+      () => (!isLoginPage && firestore && firebaseUser ? doc(firestore, 'users', firebaseUser.uid) : null),
+      [firestore, firebaseUser, isLoginPage]
   );
   const { data: appUser, isLoading: isAppUserLoading } = useDoc<User>(userProfileRef);
-
-  const isLoading = isFirebaseUserLoading || isAppUserLoading;
+  const isLoading = isFirebaseUserLoading || (!isLoginPage && isAppUserLoading);
 
   useEffect(() => {
     // If not loading and no Firebase user, they must log in.
@@ -178,5 +178,3 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     </SidebarProvider>
   );
 }
-
-    
