@@ -38,6 +38,7 @@ export type User = {
   role: 'admin' | 'user';
   isBlocked: boolean;
   avatarUrl: string;
+  qrCodeIdentifier?: string;
 };
 
 export type VisitLog = {

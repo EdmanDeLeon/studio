@@ -67,7 +67,7 @@ export default function LoginPage() {
         title: 'Processing Student Number',
         description: 'Redirecting you to complete your account setup.',
     });
-    router.push(`/signup?email=${encodeURIComponent(email)}`);
+    router.push(`/signup?email=${encodeURIComponent(email)}&studentNumber=${data.studentNumber}`);
   };
 
   return (

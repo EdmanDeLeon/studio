@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/logo';
-import { colleges } from '@/lib/types';
+import { colleges, User } from '@/lib/types';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const signupFormSchema = z.object({
@@ -57,6 +57,7 @@ function SignupFormComponent() {
 
   const emailFromParams = searchParams.get('email');
   const uidFromParams = searchParams.get('uid');
+  const studentNumber = searchParams.get('studentNumber');
 
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupFormSchema),
@@ -103,13 +104,17 @@ function SignupFormComponent() {
     const avatarIndex = (uid.charCodeAt(0) || 0) % avatarPlaceholders.length;
     const randomAvatar = avatarPlaceholders[avatarIndex].imageUrl;
 
-    const newUserProfile = {
+    const newUserProfile: User = {
         id: uid,
         ...data,
         role: 'user' as const,
         isBlocked: false,
         avatarUrl: randomAvatar,
     };
+
+    if (studentNumber) {
+        newUserProfile.qrCodeIdentifier = studentNumber;
+    }
 
     try {
         await setDoc(doc(firestore, "users", uid), newUserProfile);
@@ -227,5 +232,3 @@ export default function SignupPage() {
         </Suspense>
     );
 }
-
-    
