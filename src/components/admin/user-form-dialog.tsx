@@ -46,6 +46,7 @@ const userFormSchema = z.object({
   email: z.string().email("Invalid email address."),
   college: z.string({ required_error: "Please select a college." }),
   role: z.enum(["user", "admin"], { required_error: "Please select a role." }),
+  qrCodeIdentifier: z.string().optional(),
 });
 
 type UserFormData = z.infer<typeof userFormSchema>;
@@ -71,6 +72,7 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
       email: "",
       college: undefined,
       role: "user",
+      qrCodeIdentifier: "",
     },
   });
 
@@ -82,6 +84,7 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
         email: user.email,
         college: user.college,
         role: user.role,
+        qrCodeIdentifier: user.qrCodeIdentifier || "",
       });
     } else if (!open) {
       form.reset();
@@ -186,6 +189,23 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="qrCodeIdentifier"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Student Number / QR Code ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 24-12963-847" {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormDescription>
+                    The student number used for QR code check-ins.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <FormField
               control={form.control}
@@ -247,5 +267,3 @@ export function UserFormDialog({ user, open, onOpenChange, onFormSubmit }: UserF
     </Dialog>
   );
 }
-
-    

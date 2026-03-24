@@ -6,7 +6,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
+import { useFirestore } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -23,7 +25,7 @@ import { Logo } from '@/components/logo';
 import { useGoogleAuth } from '@/hooks/use-google-auth';
 
 const loginFormSchema = z.object({
-    studentNumber: z.string().regex(/^[0-9]+$/, 'Please enter a valid student number.'),
+    studentNumber: z.string().regex(/^[0-9-]+$/, 'Please enter a valid student number.'),
 });
 type LoginFormInputs = z.infer<typeof loginFormSchema>;
 
@@ -54,20 +56,50 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { signInWithGoogle, isSigningIn } = useGoogleAuth();
+  const firestore = useFirestore();
 
   const form = useForm<LoginFormInputs>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: { studentNumber: '' },
   });
 
-  const onStudentNumberSubmit = (data: LoginFormInputs) => {
-    // This is a mock sign-in that constructs an email from the student number.
-    const email = `${data.studentNumber}@neu.edu.ph`;
-    toast({
-        title: 'Processing Student Number',
-        description: 'Redirecting you to complete your account setup.',
-    });
-    router.push(`/signup?email=${encodeURIComponent(email)}&studentNumber=${data.studentNumber}`);
+  const onStudentNumberSubmit = async (data: LoginFormInputs) => {
+    form.clearErrors();
+    const { studentNumber } = data;
+
+    if (!firestore) {
+      toast({ title: 'Error', description: 'Database not available.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const usersRef = collection(firestore, "users");
+      const q = query(usersRef, where("qrCodeIdentifier", "==", studentNumber));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        toast({
+            title: 'Student Number Not Found',
+            description: 'Redirecting you to complete your account setup.',
+        });
+        const email = `${studentNumber}@neu.edu.ph`;
+        router.push(`/signup?email=${encodeURIComponent(email)}&studentNumber=${studentNumber}`);
+      } else {
+        const userDoc = querySnapshot.docs[0];
+        toast({
+            title: 'Welcome Back!',
+            description: 'Logging your visit...',
+        });
+        router.push(`/welcome?uid=${userDoc.id}`);
+      }
+    } catch (error) {
+      console.error("Error logging in with student number:", error);
+      toast({
+        title: 'Login Error',
+        description: 'Could not verify student number. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
