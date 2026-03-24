@@ -32,12 +32,29 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
       // Force token refresh so Firestore receives valid auth credentials
       await user.getIdToken(true);
 
+      // DEBUG - remove after fixing
+      const token = await user.getIdToken();
+      const tokenResult = await user.getIdTokenResult();
+      console.log('🔑 Token exists:', !!token);
+      console.log('🔑 Token claims:', tokenResult.claims);
+      console.log('🔑 Auth UID:', user.uid);
+      console.log('🔑 Auth email:', user.email);
+
       if (!user.email) {
         throw new Error("Email not available from Google Sign-In.");
       }
 
       const userDocRef = doc(firestore, 'users', user.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      console.log('📖 Reading path:', userDocRef.path);
+
+      let userDocSnap;
+      try {
+        userDocSnap = await getDoc(userDocRef);
+        console.log('📄 Doc exists:', userDocSnap.exists());
+      } catch (e) {
+        console.error('❌ getDoc failed:', e);
+        throw e;
+      }
 
       if (role === 'admin') {
         if (userDocSnap.exists() && userDocSnap.data()?.role === 'admin') {
