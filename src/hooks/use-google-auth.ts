@@ -22,17 +22,20 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
     setIsSigningIn(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
-      hd: 'neu.edu.ph', // Restrict to yourdomain.edu
+      hd: 'neu.edu.ph',
     });
 
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
+      // Force token refresh so Firestore receives valid auth credentials
+      await user.getIdToken(true);
+
       if (!user.email) {
         throw new Error("Email not available from Google Sign-In.");
       }
-      
+
       const userDocRef = doc(firestore, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -49,9 +52,9 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
         } else {
           const userData = userDocSnap.data() as User;
           if (userData.role === 'admin') {
-             toast({
-                title: 'Admin Account',
-                description: 'Please use the separate administrator login page.',
+            toast({
+              title: 'Admin Account',
+              description: 'Please use the separate administrator login page.',
             });
             await auth.signOut();
             setIsSigningIn(false);
@@ -75,5 +78,3 @@ export function useGoogleAuth(role?: 'admin' | 'user') {
 
   return { signInWithGoogle, isSigningIn };
 }
-
-    
