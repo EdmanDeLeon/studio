@@ -5,16 +5,14 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-export function initializeFirebase() {
-  if (!getApps().length) {
-    // Directly use firebaseConfig — skips Firebase App Hosting auto-init
-    // which only works on Google's own hosting, not Vercel.
-    const firebaseApp = initializeApp(firebaseConfig);
-    return getSdks(firebaseApp);
-  }
+let firebaseInstance: ReturnType<typeof getSdks> | null = null;
 
-  // If already initialized, return the SDKs with the already initialized App
-  return getSdks(getApp());
+export function initializeFirebase() {
+  if (firebaseInstance) return firebaseInstance;
+
+  const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  firebaseInstance = getSdks(firebaseApp);
+  return firebaseInstance;
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {
